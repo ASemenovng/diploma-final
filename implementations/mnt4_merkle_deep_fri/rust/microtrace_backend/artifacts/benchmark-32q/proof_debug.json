@@ -1,0 +1,21 @@
+{
+  "deepOpenings": 64,
+  "fixedOpenings": 64,
+  "friOpenings": 432,
+  "profile": "benchmark-32q",
+  "proofBytes": 263612,
+  "quotientOpenings": 64,
+  "rootDeep": "0x14322488df25d4a2de9d7916a8a5329cbe5a918b0b7da294b919c00d11d36b3f",
+  "rootFri": [
+    "0xb28b2d187e11628a5eac8aee39a83f392e5787c50685df5527483e8bbf61ca7b",
+    "0x9cacb6fef46de90df926186027d8fd60389a6dc4abd84d87fd92a3fbcb96897f",
+    "0x674003606f35e8ac91b81c947f438d977d5801c8b781f31a836ed5e564625877",
+    "0x07dac56c2e7845d64f9a13ba4a32df8f231dea3a76f9f1c11a72151370c95eb6",
+    "0xa5fd51b11baab1182cf1c41346ddfafb534e42f5d45eb17a9a4e1b42f2abdfb0",
+    "0x39e0a3f43b98961b55989a4fb9a116f8402a769f4904db21cab84e9b0a54641e",
+    "0x2adab14db3a472feaea192bcbc316e23dbab85560cfd750a4cfc92fcf7c02bfa"
+  ],
+  "rootQuotient": "0xa82f00c888ed7ba308ef243f67305f52ae2f89a0a0638c2d077910f1a756c978",
+  "rootTrace": "0x5ed0ebda190c885e9842914c466b5ea16be4c9a6faeff955082cd6d4d06864d5",
+  "traceOpenings": 64
+}

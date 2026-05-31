@@ -1,0 +1,22 @@
+{
+  "actualProofBytes": 953468,
+  "model": {
+    "deep_fri_ms": 4132,
+    "deep_opened_leaves": 256,
+    "fixed_opened_leaves": 256,
+    "fixed_table_ms": 1441,
+    "fri_opened_leaves": 1576,
+    "frontier_hashes": 5367,
+    "profile": "conservative-128q",
+    "proof_bytes_model": 953468,
+    "public_input_bytes": 1152,
+    "query_count": 128,
+    "quotient_ms": 2616,
+    "quotient_opened_leaves": 256,
+    "trace_ms": 321,
+    "trace_opened_leaves": 256,
+    "worst_case_calldata_gas": 15273920
+  },
+  "peakRssBytes": 236077056,
+  "provingMs": 8537
+}

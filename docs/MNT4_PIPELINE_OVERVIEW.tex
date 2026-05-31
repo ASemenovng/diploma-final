@@ -1,0 +1,294 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{fontspec}
+\usepackage[russian]{babel}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+
+\geometry{left=25mm,right=18mm,top=20mm,bottom=22mm}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+\setlist{noitemsep,topsep=3pt}
+\renewcommand{\arraystretch}{1.18}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\sloppy
+\emergencystretch=4em
+
+\title{Краткое описание пайплайна MNT4 pairing verifier}
+\author{Итоговая архитектура проекта}
+\date{22 мая 2026}
+
+\begin{document}
+\maketitle
+
+\section{Что реализовано}
+Первая часть --- полный on-chain reference для MNT4. Он нужен как контрольная реализация и как экспериментальная демонстрация того, что прямое вычисление MNT4-сопряжения в EVM практически непригодно: актуальный тестовый запуск дает $259\,719\,954$ gas для reference-вычисления digest сопряжения.
+
+Вторая часть --- основной вариант работы. Сопряжение считается off-chain в Rust. Solidity-контракт не пересчитывает цикл Миллера и финальную экспоненту. Он получает точки, digest результата, commitments к вспомогательным данным и proof-envelope, затем проверяет, что публичные входы proof согласованы с переданным утверждением.
+
+Общий поток:
+\begin{lstlisting}
+Rust MNT4 backend
+  -> MNT4 artifacts and relation roots
+  -> compact BN254 proof envelope
+  -> Solidity verifier
+\end{lstlisting}
+
+BN254 используется только как дешевый EVM-совместимый слой проверки proof, потому что Ethereum имеет precompile для BN254 pairing check. Это не заменяет MNT4-вычисление: MNT4-арифметика и MNT4-сопряжение строятся в Rust backend и сверяются с arkworks.
+
+\section{Off-chain часть}
+\subsection{Rust backend}
+Основной backend находится в:
+\begin{lstlisting}
+offchain_verify/crates/mnt4_trace_backend
+\end{lstlisting}
+
+Главные файлы:
+\begin{itemize}
+    \item \texttt{src/main.rs} --- CLI-вход: читает request и пишет JSON-артефакты;
+    \item \texttt{src/lib.rs} --- построение MNT4 artifact, commitments, relation roots и proof input.
+\end{itemize}
+
+Backend принимает точки $P_i$, точку $Q$, режим fixed-Q или Parametric-Q, context, epoch и служебные поля. В canonical fixture используются $P$ и $Q$, соответствующие генераторам MNT4-753 из arkworks.
+
+\subsection{Что считается}
+Основная функция:
+\begin{lstlisting}
+build_artifact(request) -> PairingArtifact
+\end{lstlisting}
+
+Она выполняет следующие шаги.
+\begin{enumerate}
+    \item Нормализует точки $P_i$ и $Q$ в формате MNT4-753.
+    \item Для $Q$ строит коэффициенты линий цикла Миллера через arkworks \texttt{G2Prepared::from(q)}.
+    \item Упаковывает линии в sparse-формат: отдельно линии удвоения и линии сложения.
+    \item Считает commitments:
+    \[
+        C_{dbl}=H(\text{double lines}),\quad
+        C_{add}=H(\text{addition lines}),\quad
+        C_{lines}=H(C_{dbl},C_{add}).
+    \]
+    \item Считает Miller loop через \texttt{MNT4\_753::multi\_miller\_loop}.
+    \item Выполняет final exponentiation и получает digest результата сопряжения.
+    \item Строит relation roots: \texttt{lineCacheRelationRoot}, \texttt{millerRelationRoot}, \texttt{finalExponentiationRelationRoot}.
+    \item Записывает summary MNT-native relation fragment в поле \texttt{nativeRelation}.
+\end{enumerate}
+
+
+\subsection{Выходные файлы}
+\texttt{write\_artifacts} создает:
+\begin{itemize}
+    \item \texttt{trace.json} --- общий artifact;
+    \item \texttt{witness.json} --- witness-данные;
+    \item \texttt{public\_inputs.json} --- публичные входы;
+    \item \texttt{proof\_input.json} --- вход для генерации proof-envelope.
+\end{itemize}
+
+\section{MNT-native relation fragment}
+Отдельный Rust crate:
+\begin{lstlisting}
+offchain_verify/crates/mnt_cycle_constraints
+\end{lstlisting}
+
+Он нужен для продолжения идеи: MNT4/MNT6 образуют цикл, поэтому отношение для будущего folding можно строить в MNT-sized setting, а не эмулировать MNT4 полностью в BN254.
+
+Текущий compiled relation fragment принимает три публичных root:
+\begin{itemize}
+    \item root кэша линий;
+    \item root Miller relation;
+    \item root final exponentiation relation.
+\end{itemize}
+
+Для canonical fixture получено:
+\begin{itemize}
+    \item compiled relation constraints: $24\,181$;
+    \item public inputs: $3$;
+    \item witness variables: $72\,537$;
+    \item relation satisfied: true.
+\end{itemize}
+
+Это pre-folding слой, который показывает порядок стоимости relation-части до оборачивания в folding.
+
+\section{On-chain контракты}
+\footnotesize
+\begin{longtable}{L{0.28\textwidth}L{0.62\textwidth}}
+\toprule
+\textbf{Контракт} & \textbf{Роль} \\
+\midrule
+\texttt{MNT4PairingFinal} & Главный контракт. В конструкторе создает proof checker и proof-system verifier. Пользователь вызывает именно его. \\
+\texttt{MNT4PairingVerifier} & Основная логика проверки: сверяет точки, digest результата, commitments и public inputs proof. \\
+\texttt{MNT4PairingProofChecker} & Нейтральный adapter: проверяет statement hash и передает proof в generated verifier. \\
+\texttt{MNT4ProofSystemVerifier} & Generated verifier, который использует BN254 precompiles Ethereum. \\
+\texttt{MNT4TatePairing}, \texttt{MNT4Extension}, \texttt{BigIntMNT} & Арифметика MNT4 для baseline и тестов. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\section{Главный вызов}
+Основной метод:
+\begin{lstlisting}
+verifyPairingClaim(
+    G1Point[] pointsP,
+    G2Point q,
+    bytes32 expectedResultDigest,
+    bytes32 artifactRoot,
+    bytes32 transcriptHash,
+    bytes32 context,
+    uint64 epoch,
+    ArtifactCommitments commitments,
+    bytes proof
+) returns (bool)
+\end{lstlisting}
+
+Контракт не доверяет переданному кэшу и не принимает digest результата ``на слово''. Он проверяет, что public inputs proof совпадают с утверждением пользователя: hash всех точек $P_i$, hash точки $Q$, digest результата, artifact root, transcript hash и commitments к line-cache, Miller trace и final exponentiation.
+
+Если пользователь меняет хотя бы один объект, проверка падает. После binding-проверок вызывается:
+\begin{lstlisting}
+PROOF_CHECKER.verify(statementHash, proof)
+\end{lstlisting}
+
+\section{Тесты}
+\subsection{End-to-end MNT4 verifier}
+Файл:
+\begin{lstlisting}
+offchain_verify/test/final_mnt4_pairing/MNT4PairingFinalE2E.t.sol
+\end{lstlisting}
+
+Разворачивает \texttt{MNT4PairingFinal(8)}, берет одну точку $P$ и одну точку $Q$ из canonical fixture, подает digest результата, commitments и proof-envelope. Ожидаемый результат --- \texttt{true}.
+
+В этом же файле есть negative suite: подмена $P$, подмена $Q$, подмена result digest, подмена line commitment, подмена Miller trace commitment и подмена final exponentiation commitment. Во всех случаях контракт должен отклонить вызов.
+
+\subsection{Сравнение MNT4 с arkworks}
+Файл:
+\begin{lstlisting}
+offchain_verify/test/final_mnt4_pairing/MNT4FinalArkworksCrossCheck.t.sol
+\end{lstlisting}
+
+Проверяется, что Solidity reference-арифметика согласована с canonical vectors из arkworks:
+\begin{itemize}
+    \item операции в $F_p$;
+    \item операции в $F_{p^2}$;
+    \item операции в $F_{p^4}$;
+    \item digest MNT4-сопряжения на тех же fixture-точках $P$ и $Q$.
+\end{itemize}
+
+\subsection{Fuzz-тест boolean-семантики verifier-ов}
+Тест находится в:
+\begin{lstlisting}
+offchain_verify/test/final_mnt4_pairing/PairingVerifierBooleanSemanticsFuzz.t.sol
+\end{lstlisting}
+
+Для одного fuzz-сценария accept/reject оба verifier-пути возвращают одинаковый boolean. Корректность MNT4-арифметики на самих MNT4-точках проверяется отдельно через arkworks-векторы.
+
+Foundry генерирует параметр 	exttt{uint8 scenario}. Если 	exttt{scenario} четный, выбирается валидный сценарий; если нечетный, выбирается невалидный сценарий.
+\begin{enumerate}
+    \item Валидный сценарий. MNT4-путь получает canonical fixture $P,Q$, корректный digest результата, commitments и proof-envelope. Он возвращает \texttt{true}. BN254-путь вызывает precompile \texttt{0x08} на валидной pairing equation $e(O,G_2)=1$, где $O=(0,0)$ --- point at infinity в EIP-197 encoding, а $G_2$ --- стандартный BN254 G2 generator. Он тоже возвращает \texttt{true}.
+    \item Невалидный сценарий. MNT4-путь получает тот же fixture, но первая limb координаты $x$ точки $P$ изменяется через \texttt{x[0] \textasciicircum= 1}; контракт ловит ошибку binding и результат приводится к \texttt{false}. BN254-путь получает одну пару $(G_1,G_2)$, для которой проверка $e(G_1,G_2)=1$ ложна; precompile возвращает \texttt{false}.
+\end{enumerate}
+
+Используемые BN254 точки:
+\begin{itemize}
+    \item $G_1=(1,2)$;
+    \item $O=(0,0)$;
+    \item $G_2$ в EIP-197 order: \texttt{x\_real=0x198e...12c2}, \texttt{x\_imag=0x1800...f6ed}, \texttt{y\_real=0x0906...75b}, \texttt{y\_imag=0x12c8...7daa}.
+\end{itemize}
+
+Текущий результат: fuzz-тест проходит на 256 запусках. Gas по последнему запуску: среднее значение --- $287\,398$ gas, медиана --- $424\,280$ gas.
+
+
+\subsection{Proof checker tests}
+Файл:
+\begin{lstlisting}
+offchain_verify/test/final_mnt4_pairing/MNT4PairingProofChecker.t.sol
+\end{lstlisting}
+
+Проверяется, что валидный proof fixture проходит через checker, statement hash связан с public signal, а подмена public signal отклоняется.
+
+\subsection{Rust-тесты}
+Rust backend проверяется отдельно:
+\begin{itemize}
+    \item \texttt{mnt4\_trace\_backend}: 15 тестов для line-cache relation, Miller relation, final exponentiation relation, tamper-cases и записи \texttt{nativeRelation};
+    \item \texttt{mnt\_cycle\_constraints}: 10 тестов для operation model, compiled R1CS fragment и negative tamper test для witness root.
+\end{itemize}
+
+\section{Основные результаты}
+\footnotesize
+\begin{longtable}{L{0.67\textwidth}r}
+\toprule
+\textbf{Метрика} & \textbf{Значение} \\
+\midrule
+Полное on-chain reference-вычисление MNT4 pairing digest & 259,719,954 gas \\
+Основной on-chain verifier call & 343,435 gas \\
+Backend-only proof checker & 325,283 gas \\
+Fuzz boolean semantics, mean & 287,398 gas \\
+Fuzz boolean semantics, median & 424,280 gas \\
+Rust backend total generation & 809 ms \\
+Proof generation & 526 ms \\
+BN254 verifier-envelope & 1,538 constraints \\
+MNT-native accounting model & 24,178 constraints \\
+Compiled MNT-native relation fragment & 24,181 constraints \\
+Compiled native public inputs & 3 \\
+Compiled native witness variables & 72,537 \\
+BN254 emulated pairing reference & 1,393,318 constraints \\
+Sonobe-like decider reference & 9,000,000 constraints \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\section{Оценка будущего CycleFold}
+Сам CycleFold в этой работе не реализован. Реализован слой, который должен стать его входом:
+\[
+    \text{MNT4 artifacts} \rightarrow \text{MNT-native relation fragment} \rightarrow \text{future folding}.
+\]
+
+Для одной пары текущий compiled relation fragment стоит:
+\[
+    C_{rel}(1)=24\,181\ \text{constraints}.
+\]
+
+Для multi-pairing используется shared Miller accumulator. По текущей модели:
+\[
+    C_{Miller}(1)=4\,514,\quad
+    C_{Miller}(2)=7\,520,\quad
+    C_{Miller}(4)=13\,532.
+\]
+
+Оценка relation-части без overhead самого folding:
+\[
+    C_{rel}(n) \approx C_{lines}+C_{Miller}(n)+C_{FE}+3,
+\]
+где $C_{lines}=19\,554$, $C_{FE}=110$.
+
+\begin{longtable}{L{0.40\textwidth}r}
+\toprule
+\textbf{Число пар} & \textbf{Relation constraints} \\
+\midrule
+$n=1$ & 24,181 \\
+$n=2$ & 27,187 \\
+$n=4$ & 33,199 \\
+\bottomrule
+\end{longtable}
+
+Полная стоимость будущего folding-step будет иметь вид:
+\[
+    C_{fold-step}(n)=C_{rel}(n)+C_{fold-overhead}.
+\]
+
+Текущая работа не доказывает готовый CycleFold, но показывает главное предварительное условие: MNT-native relation-часть находится на уровне десятков тысяч constraints. Поэтому следующий этап должен folding-ить именно этот MNT-native слой, а не полный non-native MNT4 pairing circuit внутри BN254.
+
+On-chain стоимость будущей версии при сохранении BN254 compression-envelope ожидается того же порядка, что сейчас:
+\[
+    G_{verify} \approx 3.2\cdot 10^5 - 4.0\cdot 10^5\ \text{gas},
+\]
+если контракт не пересчитывает MNT4-арифметику on-chain, а проверяет компактный proof.
+
+\end{document}

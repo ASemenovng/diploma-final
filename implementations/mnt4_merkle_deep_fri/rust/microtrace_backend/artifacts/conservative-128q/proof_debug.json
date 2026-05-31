@@ -1,0 +1,21 @@
+{
+  "deepOpenings": 256,
+  "fixedOpenings": 256,
+  "friOpenings": 1576,
+  "profile": "conservative-128q",
+  "proofBytes": 953468,
+  "quotientOpenings": 256,
+  "rootDeep": "0x7357a5b8ad318427ec0f7ee54ddc4826b0d1925b9aa421aec993425b5fd28453",
+  "rootFri": [
+    "0xe5822cbfc98d9c99dc0da22e2dd9a5c8655bcd315c0d3498ecb0bd3d960c6f3a",
+    "0x1fa8d819df053e6a1b3eeb6681cc9dc318b5fa597d10cdff7c832779b22fda09",
+    "0xf5f501f4da792bfc2b12872ad9436c2ca63418391bfdcd048ce9b36f1c3563e7",
+    "0x054a44832e47515a67bf5aa26a3c208c1ee0dfa5a3e74c9fae2fc122bf8bd33f",
+    "0x403de6614183091d29c82782f2a7498618a0adb28a18cee83315456c3b0c683e",
+    "0x3d49be5aa653bfb4c6e304be300e3e77ec71a3663be0e020f5cc72f61b872ef4",
+    "0x05416d215730dcc6c3fd0377e4daf5da496c6705dacec429a4cbd7f6bf1ad130"
+  ],
+  "rootQuotient": "0xdb7ec61560db9e5e2629e1d71dd61debb192153d1a24a3d57ab83d795060a1c9",
+  "rootTrace": "0x5ed0ebda190c885e9842914c466b5ea16be4c9a6faeff955082cd6d4d06864d5",
+  "traceOpenings": 256
+}

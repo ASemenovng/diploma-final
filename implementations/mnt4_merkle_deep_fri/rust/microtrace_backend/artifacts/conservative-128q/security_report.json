@@ -1,0 +1,8 @@
+{
+  "profile": "conservative-128q",
+  "query_count": 128,
+  "blowup_factor": 16,
+  "fri_rounds": 8,
+  "statement": "Профиль фиксирует число запросов для воспроизводимого gas-эксперимента.",
+  "caveat": "Модуль не заявляет production-уровень криптографической стойкости до независимого аудита полной DEEP-FRI soundness-модели."
+}

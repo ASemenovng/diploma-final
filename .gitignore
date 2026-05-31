@@ -1,0 +1,12 @@
+# Build artifacts
+out/
+cache/
+target/
+broadcast/
+node_modules/
+
+# Local/generated reports
+.reports/
+
+# macOS
+.DS_Store

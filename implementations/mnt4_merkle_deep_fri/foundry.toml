@@ -1,0 +1,17 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["../../lib"]
+remappings = ["@arith-mnt4/=../../arithmetic/mnt4_3limb/src/"]
+solc_version = "0.8.33"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+fs_permissions = [{ access = "read", path = "./rust/microtrace_backend/artifacts" }]
+gas_limit = 5000000000
+code_size_limit = 1000000
+
+allow_paths = ["../../arithmetic"]
+
