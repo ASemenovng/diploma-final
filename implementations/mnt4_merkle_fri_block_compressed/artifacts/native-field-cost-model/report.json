@@ -1,0 +1,41 @@
+{
+  "model": "MNT4 native-field Merkle/FRI N1 cost model",
+  "strict_profile": {
+    "name": "ordinary-fri-strict",
+    "query_count": 576,
+    "minimum_queries_for_128_bits": 544,
+    "fri_soundness_bits": 135.761789,
+    "schedule": [2, 2, 2, 4],
+    "source_opened_rows": 1698,
+    "fri_opened_field_values": 6152,
+    "fri_frontier_hashes": 2689,
+    "proof_bytes": 2072224,
+    "segment_count": 1,
+    "operations": {"minimum_fq_muls": 6152, "expected_fq_muls": 13256, "expected_fq_adds": 13256, "fq_inversions": 0, "merkle_hashes": 5453, "fixed_shard_words": 6912},
+    "lower_bound_total_gas": 51359352,
+    "expected_total_gas": 78340624,
+    "beats_article640_fixed_shards": true,
+    "reaches_60m_target": false
+  },
+  "article640_fixed_shards_gas": 93879746,
+  "desired_target_gas": 60000000,
+  "deep_fri_profiles_are_experimental": true,
+  "deep_fri_sensitivity": [
+    {"query_count": 32, "expected_total_gas": 8300204, "production_eligible": false},
+    {"query_count": 64, "expected_total_gas": 13649252, "production_eligible": false},
+    {"query_count": 96, "expected_total_gas": 18291632, "production_eligible": false},
+    {"query_count": 128, "expected_total_gas": 22634944, "production_eligible": false},
+    {"query_count": 256, "expected_total_gas": 39479228, "production_eligible": false}
+  ],
+  "ordinary_fri_sensitivity": [
+    {"source_columns": 6, "relation_muls_per_query": 8, "expected_total_gas": 65652496, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 6, "relation_muls_per_query": 12, "expected_total_gas": 73124368, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 6, "relation_muls_per_query": 16, "expected_total_gas": 80596240, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 8, "relation_muls_per_query": 8, "expected_total_gas": 70868752, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 8, "relation_muls_per_query": 12, "expected_total_gas": 78340624, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 8, "relation_muls_per_query": 16, "expected_total_gas": 85812496, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 10, "relation_muls_per_query": 8, "expected_total_gas": 76085008, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 10, "relation_muls_per_query": 12, "expected_total_gas": 83556880, "beats_article640": true, "reaches_60m_target": false},
+    {"source_columns": 10, "relation_muls_per_query": 16, "expected_total_gas": 91028752, "beats_article640": true, "reaches_60m_target": false}
+  ]
+}

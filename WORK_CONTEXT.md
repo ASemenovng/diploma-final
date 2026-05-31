@@ -945,3 +945,36 @@ cd /Users/a.i.semenov/diploma-final
 - Перед Solidity обязателен Rust cost-model. Stop/go:
   `expected_gas < 93,879,746`, желательно `< 60,000,000`, soundness
   `<= 2^-128`.
+
+## 2026-06-01: N1 Rust cost-model нативной Merkle/FRI-схемы
+
+- В `/Users/a.i.semenov/diploma-final` создан локальный Git-репозиторий.
+  Исходное состояние зафиксировано checkpoint-коммитом `a108281`.
+- Для эксперимента открыта ветка:
+  `codex/mnt4-native-fri-cost-model`.
+- Реализован Rust crate:
+  `implementations/mnt4_merkle_fri_block_compressed/rust/native_fri_cost_model`.
+- Команда запуска:
+  `implementations/mnt4_merkle_fri_block_compressed/scripts/run_cost_model.sh`.
+- Машиночитаемый отчет:
+  `implementations/mnt4_merkle_fri_block_compressed/artifacts/native-field-cost-model/report.json`.
+- Читаемый отчет:
+  `implementations/mnt4_merkle_fri_block_compressed/docs/N1_NATIVE_FIELD_COST_MODEL_RESULTS_RU.md`.
+- Модель проверяет strict ordinary-FRI профиль по формуле формальной
+  спецификации:
+  `rho=1/8`, `delta0=0.1507257`, минимум `544` запроса, production-профиль
+  `576` запросов, вклад FRI `135.762 bit`.
+- Перебор layer-skipping schedules и `last_layer_size in {8,16,32,64}`
+  выбрал schedule `[2,2,2,4]` с последним слоем `32`.
+- Strict ordinary-FRI результат:
+  нижняя оценка `51,359,352 gas`, ожидаемая модельная оценка
+  `78,340,624 gas`, обязательная calldata `2,072,224 bytes`.
+- Итог N1: условный `GO` относительно Article640 fixed-shards baseline
+  `93,879,746 gas`, но желаемая цель `<60M gas` не достигнута strict
+  ordinary-FRI профилем.
+- Экспериментальные DEEP-FRI строки выведены отдельно и не объявляются
+  production-ready: перед использованием требуется численная инстанциация
+  конкретной DEEP-FRI теоремы.
+- Модельные параметры, которые должны быть заменены измерением Solidity на
+  следующих этапах: ширина source leaf, число локальных `Fq`-умножений,
+  Keccak/parser budget и control-flow overhead.
