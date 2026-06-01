@@ -1132,3 +1132,27 @@ cd /Users/a.i.semenov/diploma-final
 - QA PDF занимает 29 страниц A4. В журнале нет LaTeX-ошибок и
   `Overfull \hbox`; визуально проверены титул, MNT4, MNT6, cycle-native,
   lollipop, экономическая таблица, таблица замечаний и литература.
+
+## 2026-06-01: Overleaf-пакет и уточнение нижней оценки 3-limb умножения
+
+- Для отчета создан самодостаточный Overleaf-пакет:
+  `docs/overleaf_supervisor_report/main.tex` и
+  `docs/overleaf_supervisor_report/README.md`. В Downloads собран архив
+  `/Users/a.i.semenov/Downloads/final-supervisor-overleaf.zip`.
+- Причина путаницы с Overleaf локализована: старый
+  `/Users/a.i.semenov/Downloads/main.tex` относится к прежнему шаблону и
+  содержит ссылку на отсутствующий рисунок `example-image`. Для нового
+  Overleaf-проекта нужно использовать только файл из подготовленного архива.
+- Преамбула нового отчета упрощена до минимального `pdflatex`-варианта:
+  `fontenc[T2A]`, `inputenc[utf8]`, `babel`. Убраны необязательные
+  подключения `cmap` и `lmodern`.
+- Повторно выполнены Foundry-бенчмарки:
+  `testGasBench_montMul3_internal` дает `2,959 gas/op`;
+  `testGasBench_montMul3_external_stack` дает `3,976 gas/op`.
+- В отчете исправлена нижняя оценка 3-limb Montgomery/CIOS умножения.
+  Число `627 gas` теперь явно называется строгой, но неполной границей
+  арифметического каркаса. Добавлена структурная таблица all-stack Yul-кода:
+  неизбежные `MUL/MULMOD`, сеть переносов, условные ветви и служебные расходы
+  EVM отделены от измеренного практического результата `2,959 gas/op`.
+- Обновленный QA PDF занимает 30 страниц A4. В логе отсутствуют LaTeX-ошибки,
+  `Emergency stop` и `Overfull \hbox`.
