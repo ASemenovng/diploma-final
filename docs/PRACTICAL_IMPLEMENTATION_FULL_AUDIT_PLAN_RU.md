@@ -271,6 +271,79 @@ e(P,Q) * e(-R,S) = 1.
 6. откуда берется calldata-оценка Merkle/FRI;
 7. не выдается ли частичный PCS-прототип за полный replacement цикла Миллера.
 
+### D4. Проверить актуальную Merkle/FRI модель стоимости
+
+Проверить основной каталог:
+
+```text
+implementations/mnt4_merkle_fri_cost_model/
+```
+
+Установить:
+
+1. какие математические ограничения цикла Миллера формализованы;
+2. почему используется блочно-сжатая трасса и ordinary FRI;
+3. какая теорема используется для численной soundness-оценки;
+4. сколько запросов требуется для уровня надежности не хуже `2^-128`;
+5. из каких компонентов складываются lower-bound и expected gas;
+6. какой объем calldata обязателен;
+7. не выдается ли Rust cost model за готовый Solidity-verifier;
+8. воспроизводится ли результат командой:
+
+```bash
+cd implementations/mnt4_merkle_fri_cost_model
+./scripts/run_cost_model.sh
+```
+
+В итоговом отчете явно разделить:
+
+```text
+математическая спецификация
+-> Rust-модель стоимости
+-> аналитический отрицательный/граничный результат
+-> будущая Solidity-реализация, от которой отказались после stop/go.
+```
+
+### D5. Проверить архивный Merkle/DEEP-FRI прототип
+
+Проверить исследовательский каталог:
+
+```text
+implementations/research_variants/mnt4_merkle_deep_fri_microtrace/
+```
+
+Установить:
+
+1. что реализует Rust backend;
+2. что проверяет `MNT4MerkleDeepFriVerifier`;
+3. какие значения коммитятся Merkle-корнями;
+4. как строится Fiat--Shamir transcript;
+5. какие OOD/DEEP и FRI-folding проверки выполняются;
+6. какие негативные тесты покрыты;
+7. воспроизводятся ли fixtures байт-в-байт;
+8. каковы execution gas, calldata gas, proving time и peak RSS;
+9. не используется ли архивный прототип как итоговая production-оценка.
+
+Команда:
+
+```bash
+cd implementations/research_variants/mnt4_merkle_deep_fri_microtrace
+./scripts/run_report.sh
+```
+
+Сравнить:
+
+```text
+Merkle/DEEP-FRI benchmark-32q
+Merkle/DEEP-FRI conservative-128q
+Article640 fixed-shards baseline
+strict ordinary-FRI cost model.
+```
+
+Зафиксировать ограничение: архивный DEEP-FRI прототип является
+воспроизводимым отрицательным экспериментом, а не production-ready
+replacement цикла Миллера.
+
 ## 8. Этап E. MNT6-753
 
 ### E1. Проверить арифметику
