@@ -1078,3 +1078,28 @@ cd /Users/a.i.semenov/diploma-final
 - Полный корневой `./scripts/run_all.sh` завершен с кодом `0`: пройдены
   арифметические модули, MNT4/MNT6 Article640, Rust fixture cross-check,
   MNT-cycle accounting и актуальная ordinary-FRI cost model.
+
+## 2026-06-01: подробный итоговый отчет для научного руководителя
+
+- На основе пользовательского шаблона подготовлен расширенный итоговый отчет:
+  `docs/FINAL_SUPERVISOR_REPORT_RU.tex`.
+- Собран PDF:
+  `docs/FINAL_SUPERVISOR_REPORT_RU.pdf`.
+- Отчет занимает 18 страниц и охватывает:
+  постановку задачи и ограничение Sonobe/CycleFold-like подходов;
+  теоретическую базу вычисления сопряжения и удаление знаменателя;
+  аудит 3-limb арифметики; MNT4 naive baseline и оптимизационную лестницу;
+  Article640 residue-проверку; KZG и Merkle/ordinary-FRI модели;
+  MNT6 verifier и ручную MNT4/MNT6 cycle-native модель;
+  исследовательский lollipop-305; итоговый trade-off gas/constraints.
+- В тексте отдельно помечено, какие числа получены измерением Foundry,
+  какие относятся к исполняемым Rust-моделям, а какие являются ручными
+  оценками. В частности, `73,068` операций для MNT-cycle не выдаются за
+  скомпилированный CycleFold-circuit.
+- Локальная среда не содержит `pdflatex`, поэтому визуальная QA-сборка
+  выполнена через временную XeTeX-совместимую копию с `tectonic`.
+  Канонический `.tex` сохранен в `pdflatex`-совместимом виде для Overleaf:
+  `fontenc[T2A]` и `inputenc[utf8]`.
+- Проверено: PDF имеет формат A4, 18 страниц; в логе нет LaTeX-ошибок и
+  `Overfull \hbox`; визуально проверены титул/оглавление, таблицы MNT4,
+  MNT6, lollipop-305, сводная таблица и список литературы.
