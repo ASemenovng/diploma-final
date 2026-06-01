@@ -1,0 +1,1291 @@
+% !TeX program = pdflatex
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{geometry}
+\geometry{left=22mm,right=18mm,top=18mm,bottom=19mm}
+\usepackage{setspace}
+\setstretch{1.12}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+\usepackage{enumitem}
+\setlist{itemsep=0.1em,topsep=0.2em}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage{xcolor}
+\usepackage{url}
+\urlstyle{same}
+\emergencystretch=3em
+\sloppy
+
+\newcommand{\Fq}{\mathbb{F}_q}
+\newcommand{\Fp}{\mathbb{F}_p}
+\newcommand{\Fr}{\mathbb{F}_r}
+\newcommand{\Gas}{\mathrm{gas}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+
+\begin{document}
+
+\begin{center}
+    {\Large\bfseries Итоговый отчет о выполненной работе}\\[0.4em]
+    {\large Исследование стоимости сопряжений на циклических кривых\\
+    в EVM и перспектив дешевого folding}\\[0.4em]
+    {\normalsize MNT4-753, MNT6-753 и исследовательская конструкция lollipop-305}
+\end{center}
+
+\tableofcontents
+\vspace{0.4em}
+
+\section{Постановка задачи и практическая мотивация}
+
+Работа посвящена проверяемым вычислениям на эллиптических кривых в EVM.
+Практическая мотивация связана с рекурсивными доказательствами. Если требуется
+построить цепочку доказательств, недостаточно один раз проверить отдельное
+утверждение. Нужно уметь эффективно доказывать корректность предыдущего шага
+внутри следующего шага. На этой идее строятся folding-схемы и рекурсивные
+SNARK-системы.
+
+В существующих реализациях, включая Sonobe/CycleFold, заметная часть стоимости
+может возникать не из-за пользовательского утверждения, а из-за переноса
+арифметики одной кривой в поле другой кривой. Элемент большого поля раскладывается на машинные слова (\emph{limb}-ы), а каждое умножение требует ограничений на частичные
+произведения, переносы и редукцию. В качестве практического ориентира в работе
+используется порядок около $9$ млн constraints для Sonobe/CycleFold-like
+decider.
+
+Для Ethereum задача дополнительно осложняется архитектурой EVM:
+\begin{itemize}
+    \item EVM работает с 256-битными словами;
+    \item для BN254 существуют предкомпилированные операции;
+    \item для MNT4-753 и MNT6-753 аналогичных предкомпилированных операций нет;
+    \item элементы MNT-полей имеют размер около 753 бит и требуют трех слов EVM.
+\end{itemize}
+
+Поэтому были исследованы два  пути:
+\begin{enumerate}
+    \item выполнять арифметику сопряжения непосредственно on-chain и платить
+    за нее gas;
+    \item переносить вычисление off-chain и платить за доказательство,
+    constraints, calldata и время работы.
+\end{enumerate}
+
+Цель работы состоит в том, чтобы изучить и реализовать и измерить основные варианты, определить границу применимости и проверить, дает ли цикл MNT4/MNT6 или конструкция lollipop более дешевую основу для будущего folding.
+
+\section{Теоретическая база вычисления сопряжения}
+
+\subsection{Цикл Миллера и финальная экспонента}
+
+Для reduced Tate pairing используется вычисление функции Миллера и финальная
+экспонента:
+\[
+    e(P,Q)=f_{r,P}(Q)^{(q^k-1)/r}.
+\]
+Для каждого шага обновляется аккумулятор:
+\[
+    f \leftarrow f^2\cdot \ell_{\mathrm{dbl}}(Q),
+\]
+а для ненулевой цифры signed-представления дополнительно:
+\[
+    f \leftarrow f\cdot \ell_{\mathrm{add}}(Q).
+\]
+
+Для уравнения сопряжений
+\[
+    e(P,Q)=e(R,S)
+\]
+удобно проверять эквивалентную форму
+\[
+    e(P,Q)\cdot e(-R,S)=1.
+\]
+Обе пары можно обрабатывать общим аккумулятором:
+\[
+    f \leftarrow
+    f^2\cdot \ell_{Q,i}(P)\cdot \ell_{S,i}(-R).
+\]
+Главное преимущество общего аккумулятора: возведение в квадрат выполняется
+один раз на раунд, а не отдельно для каждой пары (в некотором смысле паралельность операций).
+
+\subsection{Удаление знаменателя}
+
+В общей формуле функции Миллера возникает отношение линии к вертикальной
+линии:
+\[
+    g_{A,B}(X)=\frac{\ell_{A,B}(X)}{v_{A+B}(X)}.
+\]
+Для MNT4-753 финальная экспонента убирает этот множитель. Поэтому в вычислительном пути
+можно использовать только числитель линии. Практический смысл оптимизации существенен: на каждом шаге не требуется вычислять дополнительное обращение или вести второй аккумулятор знаменателя.
+Это свойство не является автоматически верным для любой кривой. Например для третьей кривой lollipop-305 оно не выполняется в нужной форме, и это напрямую увеличивает стоимость.
+
+
+\subsection{Проверка финальной экспоненты через свидетельство}
+
+Статья \emph{On Proving Pairings}~\cite{eprint640} позволяет заменить полную
+финальную экспоненту проверкой отношения. Для уравнения сопряжений пусть $F$ ---
+результат объединенного цикла Миллера. Требуется проверить:
+\[
+    F^{(q^k-1)/r}=1.
+\]
+При выполнении условий теоремы статьи это равносильно существованию элемента
+$c$, для которого:
+\[
+    F=c^r.
+\]
+Вместо длинной цепочки возведений в степень контракт проверяет эквивалентное
+отношение:
+\[
+    F\cdot c^{-r}=1.
+\]
+Часть степени $c^{-r}$ встраивается в тот же signed double-and-add цикл, а
+возведение в степень $q$ выполняется отображением Фробениуса.
+
+\section{Оптимизированная 3-limb арифметика MNT4-753}
+
+\subsection{Представление данных}
+
+Элемент базового поля MNT4-753 не помещается в одно слово EVM и хранится как
+три 256-битных слова:
+\[
+    x=x_0+2^{256}x_1+2^{512}x_2.
+\]
+Для длинных цепочек умножений используется Montgomery-представление.
+
+\subsection{Почему выбран Montgomery/CIOS}
+
+Были реализованы и измерены несколько вариантов:
+\begin{itemize}
+    \item Montgomery/CIOS;
+    \item Barrett-редукция;
+    \item FIOS;
+    \item Comba/SOS;
+    \item square-specialized Comba;
+    \item branchless reduction;
+    \item lazy reduction variants.
+\end{itemize}
+
+CIOS (\emph{Coarsely Integrated Operand Scanning}) объединяет накопление
+частичных произведений и Montgomery-редукцию. Для EVM это выгоднее, чем
+материализация полного 6-словного произведения в памяти.
+
+\begin{table}[htbp]
+\centering
+\caption{Сравнение базовых 3-limb операций}
+\small
+\begin{tabularx}{\linewidth}{Y l r Y}
+\toprule
+Вариант & Операция & Gas/op & Вывод \\
+\midrule
+Montgomery/CIOS & $F_q$ mul & 2,959 & основной путь \\
+Montgomery/CIOS & $F_q$ square & 2,947 & основной путь \\
+Barrett & $F_q$ mul & 46,998 & существенно дороже \\
+Barrett & $F_q$ square & 47,172 & существенно дороже \\
+FIOS & $F_q$ mul & 18,509 & дороже CIOS \\
+FIOS & $F_q$ square & 18,543 & дороже CIOS \\
+Comba/SOS & $F_q$ mul & 18,301 & проигрывает из-за memory traffic \\
+Square-Comba & $F_q$ square & 18,420 & лучше общего Comba, но хуже CIOS \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Оценка снизу и практическая оптимальность 3-limb умножения}
+
+Для произведения двух трехсловных чисел требуется не менее девяти попарных
+произведений:
+\[
+    ab=\sum_{i=0}^{2}\sum_{j=0}^{2}a_i b_j 2^{256(i+j)}.
+\]
+Montgomery-редукция выполняет три шага. На каждом шаге добавляется произведение
+корректирующего коэффициента на трехсловный модуль, то есть еще три произведения
+на шаг. Получаем:
+\[
+    9\text{ произведений для }ab+
+    9\text{ произведений для REDC}=18
+\]
+полных 512-битных limb-произведений.
+
+В EVM нет инструкции \code{MULHI}. Для восстановления старшей половины
+512-битного произведения используется связка:
+\begin{verbatim}
+lo := mul(u, v)
+mm := mulmod(u, v, not(0))
+hi := sub(sub(mm, lo), lt(mm, lo))
+\end{verbatim}
+
+При действующем расписании EVM опкоды имеют стоимость:
+\[
+    \operatorname{MUL}=5,\quad
+    \operatorname{MULMOD}=8,\quad
+    \operatorname{ADD}=\operatorname{SUB}=\operatorname{LT}=3.
+\]
+Следовательно, одно восстановление полного 512-битного произведения требует
+как минимум:
+\[
+    5+8+3+3+3=22\ \Gas.
+\]
+Чтобы оценка была содержательной, в работе дополнительно построена  opcode-трасса оптимизированного all-stack Yul-кода.
+
+Абстрактная схема CIOS содержит девять limb-произведений $a_i b_j$ и девять
+произведений $m_i q_j$ при редукции. Однако младшие произведения
+$m_i q_0$ не требуется вычислять полностью: после выбора
+\[
+    m_i=t_0\cdot(-q^{-1})\bmod 2^{256}
+\]
+младшее слово обнуляется по модулю $2^{256}$ и затем отбрасывается при сдвиге
+окна CIOS. В реализации сохранено только вычисление старшей половины этих
+трех произведений. Поэтому фактический оптимизированный граф содержит:
+\[
+\begin{aligned}
+    &18 &&\text{инструкций \code{MULMOD} для старших половин;}\\
+    &15 &&\text{полезных младших limb-произведений \code{MUL};}\\
+    &3  &&\text{инструкции \code{MUL} для коэффициентов }m_i.
+\end{aligned}
+\]
+
+Для воспроизводимой проверки выполнен одиночный внешний вызов
+\code{montMul3} с full-width входами и снята geth-style opcode-трасса. Она
+содержит $1{,}012$ исполняемых инструкций и расходует $3{,}316$ gas без
+учета базовой стоимости транзакции. Из них $2{,}843$ gas относятся к
+развернутому CIOS-телу функции; оставшиеся $473$ gas приходятся на диспетчер
+внешнего вызова, ABI-декодирование и возврат результата.
+
+Структура исполняемого CIOS-тела приведена в
+табл.~\ref{tab:montmul3-opcode-structure}.
+
+\begin{table}[htbp]
+\centering
+\caption{Динамический opcode-состав развернутого CIOS-тела \code{montMul3}}
+\label{tab:montmul3-opcode-structure}
+\small
+\begin{tabular}{l r r}
+\toprule
+Группа & Число инструкций & Сумма, gas \\
+\midrule
+\code{MUL} & 18 & 90 \\
+\code{MULMOD} & 18 & 144 \\
+\code{ADD} & 63 & 189 \\
+\code{SUB} & 36 & 108 \\
+\code{LT} & 61 & 183 \\
+\code{JUMPI} & 19 & 190 \\
+\code{MLOAD}, \code{MSTORE}, \code{CODECOPY} & $40+20+20$ & 300 \\
+\code{PUSH}, \code{DUP}, \code{SWAP} и остальные & --- & 1,639 \\
+\midrule
+Итого: развернутое CIOS-тело & --- & 2,843 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Выбранный вариант является лучшим подтвержденным практическим путем в исследованном классе алгоритмов, а неиспользованного алгоритмического резерва порядка десятков процентов не обнаружено.
+
+\subsection{Башня расширений и Karatsuba}
+
+Для MNT4 используется башня:
+\[
+    \mathbb{F}_{q^2}=\Fq[u]/(u^2-13),
+    \qquad
+    \mathbb{F}_{q^4}=\mathbb{F}_{q^2}[v]/(v^2-u).
+\]
+Умножения на фиксированные элементы поля, не являющиеся квадратами в соответствующих расширениях, реализованы с помощью специализированных формул. Например:
+\[
+    (x_0+x_1u)u=13x_1+x_0u.
+\]
+
+\begin{table}[htbp]
+\centering
+\caption{Стоимость операций расширений MNT4-753}
+\small
+\begin{tabular}{l r}
+\toprule
+Операция & Gas/op \\
+\midrule
+$\Fq$ mul & 2,959 \\
+$\Fq$ square & 2,947 \\
+$\mathbb{F}_{q^2}$ mul & 11,877 \\
+$\mathbb{F}_{q^2}$ square & 10,592 \\
+$\mathbb{F}_{q^4}$ mul & 42,764 \\
+$\mathbb{F}_{q^4}$ square & 36,606 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Эффект специализированных умножений}
+\small
+\begin{tabular}{l r r r}
+\toprule
+Операция & Общий путь & Специализированный путь & Выигрыш \\
+\midrule
+умножение на $13$ в $\Fq$ & 2,961 & 1,481 & $2.0\times$ \\
+умножение на $u$ в $\mathbb{F}_{q^2}$ & 12,587 & 1,731 & $7.3\times$ \\
+умножение на $v$ в $\mathbb{F}_{q^4}$ & 42,253 & 1,859 & $22.7\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Подготовленные разреженные линии}
+
+После подстановки точки линия Миллера имеет специальную структуру. Ее не нужно
+представлять как произвольный плотный элемент $\mathbb{F}_{q^4}$. В проекте
+реализованы:
+\begin{itemize}
+    \item prepared fixed-$Q$ cache;
+    \item sparse-формат коэффициентов;
+    \item специализированное умножение аккумулятора на линию;
+    \item pointer/packed memory API;
+    \item потоковое чтение code-shards через \code{EXTCODECOPY};
+    \item экспериментальное слияние $f\leftarrow f^2\ell(P)$ без лишнего
+    промежуточного объекта.
+\end{itemize}
+
+\paragraph{Формальная идея разреженного умножения.}
+Пусть аккумулятор цикла Миллера имеет общий вид:
+\[
+    f=f_0+f_1v,\qquad f_0,f_1\in\mathbb{F}_{q^2}.
+\]
+После подстановки $G_1$-точки подготовленная линия не является произвольным
+элементом $\mathbb{F}_{q^4}$: часть ее коэффициентов равна нулю или выражается
+через заранее известные координаты. Условно ее можно записать как:
+\[
+    \ell(P)=\ell_0(P)+\ell_1(P)v,
+\]
+где $\ell_0,\ell_1$ вычисляются из компактного набора prepared-коэффициентов.
+Вместо построения плотного объекта и вызова общего умножения
+\[
+    f\leftarrow\operatorname{Mul}_{\mathbb{F}_{q^4}}(f,\ell(P))
+\]
+используется специализированная формула:
+\[
+\begin{aligned}
+    t_0&=f_0\ell_0,\\
+    t_1&=f_1\ell_1,\\
+    t_2&=(f_0+f_1)(\ell_0+\ell_1),\\
+    f'_0&=t_0+u\,t_1,\\
+    f'_1&=t_2-t_0-t_1.
+\end{aligned}
+\]
+Умножение на $u$ выполняется дешевым переставлением коэффициентов. 
+
+\subsection{Низкоуровневые оптимизации EVM}
+
+Алгоритмические формулы были дополнены низкоуровневой реализацией:
+\begin{itemize}
+    \item фиксированный размер $3\times3$ limb развернут вручную, без
+    динамических циклов и динамических массивов;
+    \item старшая половина произведения восстанавливается через
+    \code{MUL}/\code{MULMOD}
+    \item CIOS объединяет умножение и REDC, чтобы не сохранять полное
+    шестисловное произведение;
+    \item промежуточные значения по возможности удерживаются на стеке;
+    \item pointer/packed API и scratch arena уменьшают копирование вложенных
+    структур расширений;
+    \item lazy reduction применяется только там, где диапазон промежуточного
+    значения формально ограничен и отложенная редукция действительно дешевле;
+    \item специальные операции \code{mulBy13}, \code{mulByU},
+    \code{mulByV} заменяют общие умножения;
+    \item prepared-кэш может читаться потоково из data-контрактов через
+    \code{EXTCODECOPY}, без повторной передачи большого blob;
+\end{itemize}
+
+\section{MNT4: от наивного Tate pairing к оптимизированному пути}
+
+\subsection{Начальная точка отсчета}
+
+Для честного сравнения построена наивная модель Tate pairing. Она намеренно не
+использует:
+\begin{itemize}
+    \item короткий Ate loop;
+    \item prepared lines;
+    \item sparse multiplication;
+    \item Yul hot path;
+    \item Frobenius-декомпозицию финальной экспоненты.
+\end{itemize}
+
+Для такого вызова построена нижняя экстраполяция:
+\[
+\begin{aligned}
+    \text{Miller} &=
+    752\cdot 973{,}261+372\cdot 486{,}819\\
+    &=912{,}988{,}940\ \Gas,\\
+    \text{FE} &=
+    2259\cdot 486{,}899+1100\cdot 486{,}819\\
+    &=1{,}635{,}405{,}741\ \Gas.
+\end{aligned}
+\]
+Итого:
+\[
+    2{,}548{,}394{,}681\ \Gas.
+\]
+Это нижняя оценка: она не включает построение линий, проверки входов и часть
+накладных расходов.
+
+\subsection{Оптимизационная лестница}
+
+Не все оптимизации можно честно представить как последовательность полных
+контрактов: некоторые меняют стоимость одной операции поля, другие ---
+длину цикла Миллера, третьи --- способ доставки кэша. Поэтому ниже приведены
+три взаимосвязанные таблицы.
+
+\begin{table}[htbp]
+\centering
+\caption{Лестница полного MNT4-пути}
+\small
+\begin{tabularx}{\linewidth}{r Y r r}
+\toprule
+Шаг & Реализация & Gas & Снижение к предыдущему шагу \\
+\midrule
+0 & Наивная Tate cost model & 2,548,394,681 & --- \\
+1 & Полный optimized fixed-$Q$ on-chain путь & 258,753,182 & 89.85\% \\
+2 & Fixed-$Q$ prepared sparse blob & 79,588,799 & 69.24\% \\
+3 & Fixed-$Q$ prepared sparse code-shards & 79,586,596 & 0.003\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Локальные оптимизации арифметики}
+\small
+\begin{tabularx}{\linewidth}{Y Y r r}
+\toprule
+Оптимизация & Что меняется & Было & Стало \\
+\midrule
+Montgomery/CIOS + Yul & $F_q$ mul вместо generic Solidity multi-limb &
+18,770 & 2,959 \\
+Karatsuba для башни & $F_{q^4}$ mul вместо generic расширения &
+486,819 & 42,764 \\
+Умножение на $13$ & общая операция заменяется сложениями &
+2,961 & 1,481 \\
+Умножение на $u$ & $(x_0+x_1u)u=13x_1+x_0u$ &
+12,587 & 1,731 \\
+Умножение на $v$ & перестановка $F_{q^2}$-коэффициентов &
+42,253 & 1,859 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Лестница цикла Миллера, финальной экспоненты и кэша}
+\small
+\begin{tabularx}{\linewidth}{Y Y r r}
+\toprule
+Оптимизация & Смысл & Было & Стало \\
+\midrule
+Ate вместо полного Tate loop & короткая signed-запись параметра &
+912,988,940 & 427,284,953 \\
+Sparse line multiplication & линия не материализуется как общий $F_{q^4}$ &
+973,261/шаг & $\approx137,874$/digit \\
+Prepared fixed-$Q$ cache & line generation переносится из on-chain &
+258,753,182 & 79,588,799 \\
+Frobenius/$w_0$ FE & декомпозиция вместо binary exponentiation &
+1,635,405,741 & $\approx28,134,825$ \\
+Aggressive fused hot path & слияние $f^2$ и sparse line multiplication &
+51,978,344 & 51,949,399 \\
+Code-shards & повторный blob заменяется \code{EXTCODECOPY} &
+79,588,799 & 79,586,596 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Формальная нижняя оценка стоимости Miller core}
+
+Для двухпарного уравнения:
+\[
+    e(P,Q)e(-R,S)=1
+\]
+используем:
+\[
+    L=376,\qquad H=123,
+\]
+где $L$ --- число удвоений, $H$ --- число ненулевых addition-шагов.
+Минимально нужны:
+\begin{itemize}
+    \item $L$ возведений аккумулятора в квадрат;
+    \item $2L$ применений doubling-линий;
+    \item $2H$ применений addition-линий.
+\end{itemize}
+Грубая нижняя оценка через измеренные $\mathbb{F}_{q^4}$-операции:
+\[
+\begin{aligned}
+    376\cdot 36{,}606 &= 13{,}763{,}856,\\
+    2\cdot376\cdot42{,}764 &= 32{,}157{,}728,\\
+    2\cdot123\cdot42{,}764 &= 10{,}499{,}864.
+\end{aligned}
+\]
+Суммарно:
+\[
+    56{,}421{,}448\ \Gas.
+\]
+Реальный код дополнительно загружает sparse-коэффициенты, вычисляет значения
+линий, работает с памятью и обрабатывает signed loop. Поэтому результат порядка $87.7$ млн gas согласуется с формальной моделью.
+
+\section{MNT4 direct residue verifier по ePrint 2024/640}
+
+\subsection{API и граница доверия}
+
+В основном fixed-shards режиме контракт проверяет:
+\[
+    e(P,Q)e(-R,S)=1,
+\]
+где $Q,S\in G_2$ фиксированы при развертывании, а $P,R\in G_1$ передаются
+пользователем. Prepared-кэш линий хранится в runtime-коде data-контрактов.
+Адреса shards фиксируются в конструкторе. Пользователь не может заменить их
+при вызове.
+
+\subsection{Результаты MNT4}
+
+\begin{table}[htbp]
+\centering
+\caption{Direct residue verifier MNT4}
+\small
+\begin{tabularx}{\linewidth}{Y Y r}
+\toprule
+Сценарий & Что выполняется & Gas \\
+\midrule
+Miller core & цикл Миллера без финальной экспоненты & 87,747,219 \\
+Full equation & Miller core + обычная FE & 115,997,313 \\
+Residue equation & Miller core + $c$-проверка вместо полной FE & 93,879,746 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Вклад обычной FE:
+\[
+    115{,}997{,}313-87{,}747{,}219
+    =28{,}250{,}094\ \Gas.
+\]
+Вклад residue-проверки:
+\[
+    93{,}879{,}746-87{,}747{,}219
+    =6{,}132{,}527\ \Gas.
+\]
+Экономия:
+\[
+    22{,}117{,}567\ \Gas.
+\]
+Оптимизация финальной экспоненты работает, но не устраняет главный расход:
+цикл Миллера.
+
+\section{Проверка цикла Миллера через полиномиальные отношения}
+
+\subsection{Математическая идея}
+
+Следующий шаг статьи~\cite{eprint640} --- не исполнять все умножения
+расширенного поля on-chain, а проверить их как полиномиальные отношения.
+В статье сформулирована общая идея. Для MNT4-753 потребовалась отдельная
+адаптация: нужно связать quotient-check не с абстрактными умножениями, а с
+реальными состояниями общего multi-Miller аккумулятора, fixed-$Q$/fixed-$S$
+кэшем и residue-свидетельством $c$.
+
+Пусть:
+\[
+    \mathbb{F}_{q^4}\simeq \Fq[X]/(p(X)).
+\]
+Для умножения $a\cdot b=c$ существует частный многочлен $Q(X)$:
+\[
+    a(X)b(X)-c(X)=Q(X)p(X).
+\]
+Verifier выбирает случайную точку $\alpha$ и проверяет:
+\[
+    a(\alpha)b(\alpha)-c(\alpha)=Q(\alpha)p(\alpha).
+\]
+Для набора отношений используется challenge $\beta$:
+\[
+    \sum_i\beta^i R_i(X)=Q(X)Z_H(X).
+\]
+Для цикла Миллера $R_i$ кодируют реальные переходы:
+\[
+    f_{i+1}=f_i^2\ell_{Q,i}(P)\ell_{S,i}(-R).
+\]
+
+Чтобы prover не подменил значения после получения $\alpha$, нужны commitments
+и доказательства открытия.
+
+\subsection{Построенная MNT4-модель}
+
+Для MNT4 была построена следующая модель.
+
+\paragraph{Блочное сжатие цикла.}
+Несколько раундов объединяются в один блок. Для двух шагов:
+\[
+    f_{i+2}
+    =
+    f_i^4\ell_i^2\ell_{i+1}.
+\]
+Для блока длины $d$:
+\[
+    f_{i+d}
+    =
+    f_i^{2^d}
+    \prod_{j=0}^{d-1}\ell_{i+j}^{2^{d-1-j}}.
+\]
+В модели используется $d=5$. Тогда один блочный переход для уравнения
+сопряжений имеет вид:
+\[
+    F_{b+1}
+    =
+    F_b^{32}
+    G_b^Q(P)
+    G_b^S(-R)
+    c^{\kappa_b}.
+\]
+Здесь $G_b^Q$ и $G_b^S$ --- сжатые делители для зафиксированных точек
+$Q,S$, а $\kappa_b$ --- заранее известный показатель residue-рекурсии.
+
+\paragraph{Проверка вычисления делителей.}
+Для fixed-$Q$/fixed-$S$ коэффициенты делителей строятся off-chain и
+фиксируются root-ом. Значение $G_b^Q(P)$ не должно выбираться prover-ом
+произвольно. Поэтому строится таблица вычисления по схеме Горнера:
+\[
+    h_{j+1}=h_j P_x+\gamma_j,
+\]
+где $\gamma_j$ --- зафиксированный коэффициент сжатого делителя. Аналогично
+вычисляется $G_b^S(-R)$. Локальные отношения Горнера и блочные переходы
+собираются в quotient polynomial.
+
+\paragraph{Что доказано для модели.}
+Для спецификации были формализованы:
+\begin{itemize}
+    \item связь пяти пошаговых переходов Миллера с одним сжатым делителем;
+    \item корректность Horner-рекурсии для fixed-divisor коэффициентов;
+    \item quotient identity для локальных переходов;
+    \item Merkle-binding динамических таблиц;
+    \item Fiat--Shamir transcript и детерминированный порядок запросов;
+    \item ordinary-FRI low-degree проверка;
+    \item итоговая soundness-оценка как сумма ошибок FRI,
+    Schwartz--Zippel, Merkle-binding и Fiat--Shamir модели.
+\end{itemize}
+
+\subsection{KZG over BN254}
+
+KZG дает короткое доказательство открытия и дешевую on-chain проверку благодаря
+BN254 precompile. В проекте реализован реальный opening layer:
+\[
+    C_j=\operatorname{Commit}(w_j),\qquad
+    C_Q=\operatorname{Commit}(Q).
+\]
+Для одного полинома проверяется стандартное отношение:
+\[
+    e(C-yG_1+x\pi,G_2)=e(\pi,\tau G_2).
+\]
+Здесь $C$ --- commitment, $x$ --- точка открытия, $y=f(x)$ ---
+заявленное значение, $\pi$ --- opening proof, $\tau G_2$ --- элемент SRS.
+Measured стоимость одной on-chain opening-проверки составляет около:
+\[
+    133{,}039\ \Gas.
+\]
+
+Проблема переносится внутрь circuit: MNT4-арифметика становится non-native
+относительно BN254.
+
+\begin{table}[htbp]
+\centering
+\caption{Оценка BN254 non-native constraints}
+\small
+\begin{tabular}{l r}
+\toprule
+Операция & Constraints \\
+\midrule
+MNT4 $\Fq$ mul как non-native & 3,692 \\
+MNT4 $\mathbb{F}_{q^2}$ mul как non-native & 11,300 \\
+Модель MNT4 $\mathbb{F}_{q^4}$ mul как non-native & 63,436 \\
+Приближенная sparse Miller relation & 63,309,128 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Число $63{,}309{,}128$ получается не из размера KZG proof. Оно относится к
+relation, которую нужно доказать до открытия: каждое MNT4 $F_{q^4}$
+умножение при переносе в BN254 R1CS раскладывается на non-native операции.
+В проекте отдельно измерены $3{,}692$ constraints для одного MNT4
+$F_q$-умножения через emulated field, $11{,}300$ для $F_{q^2}$ и
+$63{,}436$ для модели $F_{q^4}$. Подстановка числа sparse Miller
+переходов дает ориентир $63.3$ млн constraints. То есть KZG уменьшает
+gas verifier-а, но возвращает исходную проблему роста off-chain constraints.
+
+\subsection{Merkle/FRI}
+
+В альтернативном направлении prover коммитится к таблицам через Merkle root.
+Verifier проверяет Merkle-пути открытых строк. FRI
+(\emph{Fast Reed--Solomon Interactive Oracle Proof of Proximity}) доказывает,
+что открываемые таблицы согласуются с многочленами ограниченной степени.
+Fiat--Shamir-преобразование делает схему неинтерактивной: challenges
+детерминированно вычисляются из transcript.
+
+В проекте реализованы:
+\begin{itemize}
+    \item Merkle opening layer;
+    \item исполняемый FRI эксперимент;
+    \item спецификация блочно-сжатого ordinary-FRI пути;
+    \item FRI cost model для нативного MNT4-поля.
+\end{itemize}
+
+Для MNT4 один элемент поля занимает:
+\[
+    3\cdot 32=96\text{ байт}.
+\]
+Умеренная модель открытий:
+\[
+    4096\cdot96+128\cdot16\cdot32+16\cdot32
+    =459{,}264\text{ байт}.
+\]
+Актуальная FRI модель для 128-битного профиля:
+
+\begin{table}[htbp]
+\centering
+\caption{Ordinary-FRI cost model}
+\small
+\begin{tabular}{l r}
+\toprule
+Показатель & Значение \\
+\midrule
+Число запросов & 576 \\
+Оценка soundness & 135.76 бит \\
+FRI schedule & $[2,2,2,4]$ \\
+Размер доказательства & 2,072,224 байт \\
+Нижняя оценка & 51,359,352 gas \\
+Ожидаемая модельная оценка & 78,340,624 gas \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Из чего складывается нижняя оценка.}
+Для каждого случайного запроса verifier должен получить раскрытые значения
+столбцов, соседние значения для локального перехода, Merkle-path и элементы
+слоев FRI. Поскольку один MNT4-элемент занимает $96$ байт, даже до исполнения
+арифметики calldata становится существенным компонентом стоимости. Актуальная
+модель суммирует:
+\[
+    \Gas_{\min}
+    =
+    \Gas_{\mathrm{calldata}}
+    +
+    \Gas_{\mathrm{Merkle}}
+    +
+    \Gas_{\mathrm{FRI\ folding}}
+    +
+    \Gas_{\mathrm{local\ checks}}.
+\]
+Для профиля с $576$ запросами строгая нижняя оценка равна
+$51{,}359{,}352$ gas. Исполняемая модель с реалистичными накладными расходами дает:
+\[
+    78{,}340{,}624\ \Gas.
+\]
+
+\section{MNT6-753 и цикл MNT4/MNT6}
+
+\subsection{MNT6 arithmetic и residue verifier}
+
+Для MNT6 реализована башня:
+\[
+    \Fq\longrightarrow\mathbb{F}_{q^3}\longrightarrow\mathbb{F}_{q^6}.
+\]
+Реализованы packed/pointer API, scratch arena, prepared cache, потоковое чтение
+code-shards, fused line multiplication и Frobenius/w0 FE.
+
+\begin{table}[htbp]
+\centering
+\caption{Базовые операции MNT6}
+\small
+\begin{tabular}{l r}
+\toprule
+Операция & Gas/op \\
+\midrule
+$\Fq$ mul & 2,314 \\
+$\Fq$ square & 2,301 \\
+$\mathbb{F}_{q^3}$ mul & 36,472 \\
+$\mathbb{F}_{q^3}$ square & 26,813 \\
+$\mathbb{F}_{q^6}$ mul & 166,774 \\
+$\mathbb{F}_{q^6}$ square & 113,788 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Лемма 2. Общий аккумулятор для уравнения сопряжений.}
+Пусть на раунде $i$ индивидуальные аккумуляторы обновляются как:
+\[
+    f'_{Q}=f_Q^2\ell_{Q,i}(P),
+    \qquad
+    f'_{S}=f_S^2\ell_{S,i}(-R).
+\]
+Для произведения $F=f_Qf_S$ имеем:
+\[
+    F'
+    =
+    f'_Qf'_S
+    =
+    (f_Qf_S)^2
+    \ell_{Q,i}(P)\ell_{S,i}(-R).
+\]
+Следовательно, вместо двух возведений аккумуляторов в квадрат достаточно
+одного.
+
+\begin{table}[htbp]
+\centering
+\caption{Результаты MNT6}
+\small
+\begin{tabularx}{\linewidth}{Y r}
+\toprule
+Режим & Gas \\
+\midrule
+Miller loop, packed pointer blob & 93,254,054 \\
+Packed Frobenius/w0 FE & 38,428,108 \\
+Полное single pairing: Miller + packed FE & 131,685,843 \\
+Диагностический residue digest одного pairing & 103,277,505 \\
+Два Miller loop + полная FE для equation & 226,078,963 \\
+Общий multi-Miller + $c$-проверка для equation & 172,004,717 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Экономия общего residue verifier относительно контрольного equation baseline:
+\[
+    226{,}078{,}963-172{,}004{,}717
+    =54{,}074{,}246\ \Gas,
+\]
+то есть $23.92\%$.
+
+\subsection{Cycle-native accounting}
+
+Rust-модуль проверяет параметры цикла через arkworks, строит reference
+pairings и считает operation/constraints accounting для будущего native
+relation layer.
+
+
+\begin{table}[htbp]
+\centering
+\caption{Предварительная модель MNT-cycle-native relation}
+\small
+\begin{tabular}{l l r r r}
+\toprule
+Сторона & Башня & Miller rounds & Additions & Prepared relation \\
+\midrule
+MNT4 & $\mathbb{F}_{q^2}/\mathbb{F}_{q^4}$ & 376 & 124 & 24,126 \\
+MNT6 & $\mathbb{F}_{q^3}/\mathbb{F}_{q^6}$ & 376 & 123 & 48,942 \\
+\midrule
+\multicolumn{4}{r}{Сумма} & 73,068 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Для сравнения:
+\[
+    \text{BN254 non-native sparse Miller estimate}=63{,}309{,}128,
+\]
+\[
+    \text{Sonobe/CycleFold-like anchor}\approx9{,}000{,}000.
+\]
+
+
+\paragraph{Оценка будущего cycle-native folding слоя.}
+Внутреннее ядро relation уже посчитано по формулам проекта:
+\[
+    24{,}126+48{,}942=73{,}068
+\]
+нативных multiplication constraints. 
+
+\begin{table}[htbp]
+\centering
+\caption{Проекция cycle-native constraints при разных накладных расходах}
+\small
+\begin{tabular}{l r r}
+\toprule
+Сценарий & Коэффициент к relation core & Constraints \\
+\midrule
+Только подготовленные fragments & $1\times$ & 73,068 \\
+Легкая folding-обвязка & $2\times$ & 146,136 \\
+Умеренная folding-обвязка & $4\times$ & 292,272 \\
+Консервативная folding-обвязка & $8\times$ & 584,544 \\
+Верхняя исследовательская граница & $12\times$ & 876,816 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Исследовательское направление lollipop-305}
+
+\subsection{Идея}
+
+Статья \emph{Cycles of supersingular elliptic curves for pairing-based proof
+systems}~\cite{eprint1627} предлагает конструкции, в которых часть
+арифметики выполняется над меньшими полями. Для исследовательского примера
+lollipop-305 выбран параметр:
+\[
+    x=8004046504391788107635887004283725454478544674,
+\]
+\[
+    p=x^2-x+1,\qquad q=x^2+1.
+\]
+Оба основных поля имеют размер около 305 бит и помещаются в два слова EVM.
+Цель этого направления --- проверить, является ли уменьшение числа limb-ов
+достаточным условием практического выигрыша. 
+
+\subsection{Кривые конструкции}
+
+\begin{table}[htbp]
+\centering
+\caption{Pairing-компоненты lollipop-305}
+\small
+\begin{tabularx}{\linewidth}{l Y Y}
+\toprule
+Часть & Кривая и поле & Целевое поле \\
+\midrule
+stick & pairing-friendly prototype над $\Fp$ & $\mathbb{F}_{p^4}$ \\
+cycle $E$ & $E/\mathbb{F}_{p^2}: y^2=x^3+(\mu+1)x$ & $\mathbb{F}_{p^4}$ \\
+cycle $\widehat{E}$ &
+$\widehat{E}/\mathbb{F}_{q^2}: y^2=x^3+(\eta+2)$ &
+$\mathbb{F}_{q^6}$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Полная конструкция содержит три pairing-компонента:
+\begin{enumerate}
+    \item ``палочку'' --- pairing-friendly prototype над $\Fp$;
+    \item первую supersingular cycle-кривую $E/\mathbb{F}_{p^2}$;
+    \item вторую supersingular cycle-кривую
+    $\widehat{E}/\mathbb{F}_{q^2}$.
+\end{enumerate}
+Дополнительно статья использует меньшую непаринговую кривую для рекурсивного
+сценария, но она не является отдельным EVM pairing verifier.
+
+Проверены отношения:
+\[
+    \#E(\mathbb{F}_{p^2})=p^2+1=qN_q,
+\]
+\[
+    \#\widehat{E}(\mathbb{F}_{q^2})=q^2-q+1=pN_p.
+\]
+
+\paragraph{Лемма 3. Исправление башни для stick/$E$-части.}
+В работе вычислительно найден и проверен неквадрат:
+\[
+    \xi=1+u.
+\]
+Поэтому используется башня:
+\[
+    \mathbb{F}_{p^4}
+    =
+    \mathbb{F}_{p^2}[v]/(v^2-\xi).
+\]
+
+\paragraph{Лемма 4. Twist/Frobenius-отношение.}
+Для башни построено отображение из twist в исходную кривую:
+\[
+    \psi(X,Y)=(\xi X,\xi vY).
+\]
+backend проверяет:
+\[
+    [r]P=\mathcal O,\quad
+    [r]\psi(Q')=\mathcal O,\quad
+    \pi_p(\psi(Q'))=[p]\psi(Q'),
+\]
+а также нетривиальность результата сопряжения и условие принадлежности
+целевой подгруппе.
+
+\paragraph{Лемма 5. Корректная форма для $\widehat E$.}
+Для третьей кривой выбрана башня:
+\[
+    \mathbb{F}_{q^6}
+    =
+    \mathbb{F}_{q^2}[w]/(w^3-\rho),
+\]
+где:
+\[
+    \rho^2=\frac{2+\eta}{2-\eta}.
+\]
+
+Для $\widehat E$ упрощенная Tate-style формула не проходит. Корректным
+reference путем является Weil-отношение:
+\[
+    e_p(P,Q)
+    =
+    (-1)^p\frac{f_{p,P}(Q)}{f_{p,Q}(P)}.
+\]
+Отсюда следует verifier relation:
+\[
+    f_{p,P}(Q)f_{p,-P}(Q)
+    =
+    f_{p,Q}(P)f_{p,Q}(-P).
+\]
+
+\subsection{Оптимизированная 2-limb арифметика}
+
+Для двухсловного Montgomery-умножения generic lower bound содержит:
+\[
+    4\text{ произведения для }ab+
+    4\text{ произведения для REDC}.
+\]
+Для lollipop-305 старший limb модуля меньше $2^{49}$. Поэтому:
+\[
+    a_1b_1<2^{98}<2^{256}.
+\]
+Одно полное 512-битное восстановление можно заменить обычным \code{MUL}.
+Дополнительно убрана запись limb-а, который сразу удаляется CIOS-сдвигом.
+
+Для 305-битных полей проделан тот же класс работы, что и для 753-битной арифметики MNT4:
+\begin{itemize}
+    \item Montgomery/CIOS-представление;
+    \item ручной Yul hot path;
+    \item специальная обработка малого старшего limb-а;
+    \item арифметика расширений $\mathbb{F}_{p^2}$,
+    $\mathbb{F}_{p^4}$, $\mathbb{F}_{q^2}$ и $\mathbb{F}_{q^6}$;
+    \item Karatsuba и специализированные умножения на нерезиденты;
+    \item prepared lines, residue-пути и fixed-cache режимы;
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\caption{Сравнение 2-limb lollipop-305 и 3-limb MNT4}
+\small
+\begin{tabular}{l r r r}
+\toprule
+Операция & lollipop-305 & MNT4-753 & Выигрыш \\
+\midrule
+$F_p$ mul & 1,018 & 2,959 & $2.91\times$ \\
+$F_p$ square & 940 & 2,947 & $3.14\times$ \\
+$F_{p^2}$ mul & 4,171 & 11,877 & $2.85\times$ \\
+$F_{p^2}$ square & 3,254 & 10,592 & $3.26\times$ \\
+$F_{p^4}$ mul & 14,942 & 42,764 & $2.86\times$ \\
+$F_{p^4}$ square & 13,211 & 36,606 & $2.77\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Почему для третьей кривой нужны два аккумулятора}
+
+Для stick и $E$ можно использовать Article640-style residue verifier. Для
+$\widehat{E}/\mathbb{F}_{q^2}$ степень вложения равна $3$. Стандартное удаление
+знаменателей линий не работает в требуемой форме. Поэтому backend и Solidity
+отдельно накапливают:
+\[
+    F_{\mathrm{num}},\qquad F_{\mathrm{den}}.
+\]
+На doubling-шаге:
+\[
+    F_{\mathrm{num}}\leftarrow
+    F_{\mathrm{num}}^2\ell_{\mathrm{dbl}}(P),
+\]
+\[
+    F_{\mathrm{den}}\leftarrow
+    F_{\mathrm{den}}^2v_{\mathrm{dbl}}(P).
+\]
+На addition-шаге:
+\[
+    F_{\mathrm{num}}\leftarrow
+    F_{\mathrm{num}}\ell_{\mathrm{add}}(P),
+\]
+\[
+    F_{\mathrm{den}}\leftarrow
+    F_{\mathrm{den}}v_{\mathrm{add}}(P).
+\]
+В конце проверяется отношение:
+\[
+    c^p F_{\mathrm{den}}=F_{\mathrm{num}}.
+\]
+Это эквивалентно residue-проверке частного:
+\[
+    F=F_{\mathrm{num}}/F_{\mathrm{den}}.
+\]
+Ведение двух аккумуляторов и 305-битное возведение $c^p$ в
+$\mathbb{F}_{q^6}$ делают третью часть заметно дороже.
+
+\subsection{Результаты lollipop-305}
+
+\begin{table}[htbp]
+\centering
+\caption{Pairing-verifier-ы lollipop-305}
+\small
+\begin{tabularx}{\linewidth}{Y Y r}
+\toprule
+Часть & Режим & Function gas \\
+\midrule
+stick & residue FE & 8,671,771 \\
+cycle $E/\mathbb{F}_{p^2}$ & residue FE & 18,283,781 \\
+cycle $\widehat{E}/\mathbb{F}_{q^2}$ & Weil fallback & 200,977,272 \\
+cycle $\widehat{E}/\mathbb{F}_{q^2}$ & prepared-Ate raw $F_{\mathrm{num}}/F_{\mathrm{den}}$ & 76,422,749 \\
+cycle $\widehat{E}/\mathbb{F}_{q^2}$ & prepared-Ate + residue & 106,441,661 \\
+\midrule
+Полный lollipop-cycle & stick + $E$ + улучшенный $\widehat{E}$ & 133,397,213 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Для fixed-cache режима дополнительно сравнивались calldata+commitment и
+code-shards:
+\[
+    135{,}916{,}985\ \Gas
+    \quad\text{против}\quad
+    133{,}651{,}154\ \Gas.
+\]
+Code-shards экономят около $2.27$ млн gas за счет исключения повторной передачи
+примерно $273$ КБ подготовленных линий.
+
+\section{Сводные результаты и trade-off}
+
+\begin{longtable}{p{0.31\linewidth}p{0.36\linewidth}r}
+\caption{Основные результаты работы}\\
+\toprule
+Подход & Что измеряется & Результат \\
+\midrule
+\endfirsthead
+\toprule
+Подход & Что измеряется & Результат \\
+\midrule
+\endhead
+Наивный Tate baseline & строгая нижняя экстраполяция & 2.55 млрд gas \\
+MNT4 full optimized on-chain & fixed-$Q$, линии строятся on-chain & 258.8 млн gas \\
+MNT4 Article640 residue & fixed-shards equation с проверкой $G_1$ & 93.7 млн gas \\
+MNT6 full equation & два Miller loop + packed FE & 226.1 млн gas \\
+MNT6 Article640 residue & общий multi-Miller accumulator & 172.0 млн gas \\
+KZG opening BN254 & короткая on-chain opening-проверка & 133 тыс. gas \\
+KZG + MNT4 relation & BN254 non-native sparse Miller estimate & 63.3 млн constraints \\
+Merkle/ordinary-FRI & ожидаемая модельная стоимость & 78.3 млн gas \\
+Merkle/ordinary-FRI & размер доказательства & 2.07 МБ \\
+MNT-cycle-native relation & MNT4 + MNT6 fragments & 73,068 операций \\
+lollipop-305 & полный улучшенный исследовательский цикл & 133.4 млн gas \\
+\bottomrule
+\end{longtable}
+
+\subsection{Три формы стоимости}
+
+Полученные результаты показывают не один, а три взаимосвязанных вида расходов.
+
+\paragraph{On-chain arithmetic.}
+Если считать MNT-сопряжение непосредственно в EVM, приходится платить gas за
+трехсловную арифметику, расширения поля и сотни шагов цикла Миллера.
+
+\paragraph{Off-chain constraints.}
+Если перенести вычисление в proof над BN254, MNT-арифметика становится
+non-native. Gas on-chain уменьшается, но растет число constraints, размер
+witness и время работы prover-а.
+
+\paragraph{Calldata и proof size.}
+Если использовать нативные таблицы и Merkle/FRI, можно уменьшить зависимость от
+BN254 non-native arithmetic, но стоимость возвращается через Merkle-пути,
+раскрытия таблиц и calldata.
+
+\subsection{Экономическая интерпретация}
+
+На текущий момент на Etherscan:
+\[
+    \text{ETH price}\approx1982.85\text{ USD},
+\]
+\[
+    \text{Ethereum standard gas price}\approx0.294\text{ gwei}.
+\]
+RPC Arbitrum One возвращал:
+\[
+    \text{Arbitrum One execution gas price}\approx0.020\text{ gwei}.
+\]
+Для Ethereum mainnet:
+\[
+    \text{cost}_{USD}=
+    \Gas\cdot \text{gas price}_{gwei}\cdot10^{-9}\cdot1982.85.
+\]
+
+\begin{table}[htbp]
+\centering
+\caption{Стоимость эквивалентного EVM-исполнения по снимку 01.06.2026}
+\small
+\begin{tabularx}{\linewidth}{Y r r r}
+\toprule
+Режим & Gas & Ethereum mainnet & Arbitrum L2 execution \\
+\midrule
+MNT4 prepared sparse & 79,586,596 & \$46.40 & \$3.16 \\
+MNT4 Article640 residue & 93,734,789 & \$54.64 & \$3.72 \\
+MNT6 Article640 residue & 172,004,717 & \$100.27 & \$6.82 \\
+lollipop full research-cycle & 133,397,213 & \$77.76 & \$5.29 \\
+Merkle/FRI lower bound & 51,359,352 & \$29.94 & \$2.04 \\
+Merkle/FRI expected model & 78,340,624 & \$45.67 & \$3.11 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\section{Итоговые выводы}
+
+\begin{enumerate}
+    \item Реализована и измерена оптимизированная 753-битная арифметика
+    MNT4-753/MNT6-753 в Solidity/Yul. Для MNT4 экспериментально обоснован выбор
+    Montgomery/CIOS, Karatsuba, специализированных умножений на нерезиденты,
+    sparse lines и packed hot path.
+
+    \item Построена оптимизационная лестница от наивного Tate baseline
+    ($2.55$ млрд gas по строгой нижней экстраполяции) до prepared MNT4 пути
+    ($79.6$ млн gas). Это показывает эффект оптимизаций и одновременно
+    сохраняющуюся границу EVM.
+
+    \item Реализована идея residue-проверки по ePrint 2024/640. Для MNT4
+    финальная часть сокращается с $28.25$ млн до $6.13$ млн gas overhead.
+    Для MNT6 общий multi-Miller residue verifier снижает equation baseline на
+    $54.07$ млн gas.
+
+    \item Исследована замена цикла Миллера полиномиальной проверкой. KZG
+    уменьшает on-chain gas, но переносит стоимость в BN254 non-native
+    constraints. Merkle/FRI избегает части этого переноса, но требует большого
+    proof и calldata.
+
+    \item Реализован предварительный MNT4/MNT6 cycle-native слой. Его
+    accounting дает $24{,}126$ и $48{,}942$ multiplication operations для
+    подготовленных fragments.
+
+    \item Исследована конструкция lollipop-305. Двухсловная арифметика
+    действительно дешевле MNT4 примерно в $2.8$--$3.3$ раза. Однако третья
+    кривая требует двух аккумуляторов числителя и знаменателя, поэтому полный
+    прямой EVM-цикл остается дорогим.
+\end{enumerate}
+
+Главный вывод работы:
+\begin{quote}
+Без MNT-precompile или нового proof-system слоя нельзя одновременно получить
+малую on-chain стоимость и малую off-chain стоимость простым переносом
+вычислений. Выполненная работа локализует причины этого ограничения,
+подтверждает их кодом и измерениями и показывает наиболее перспективное
+направление продолжения: MNT4/MNT6 cycle-native relation layer с последующим
+folding.
+\end{quote}
+
+\begin{thebibliography}{9}
+\bibitem{eprint640}
+Andrija Novakovic, Liam Eagen.
+\emph{On Proving Pairings}.
+Cryptology ePrint Archive, Paper 2024/640, 2024.
+URL: \url{https://eprint.iacr.org/2024/640.pdf}.
+
+\bibitem{eprint1627}
+Craig Costello, Pratyush Korpal.
+\emph{Cycles of supersingular elliptic curves for pairing-based proof systems}.
+Cryptology ePrint Archive, Paper 2024/1627, 2024.
+URL: \url{https://eprint.iacr.org/2024/1627.pdf}.
+
+\bibitem{sonobe}
+Privacy and Scaling Explorations.
+\emph{Sonobe: a modular library for folding schemes}.
+URL: \url{https://github.com/privacy-ethereum/sonobe}.
+
+\bibitem{etherscanGas}
+Etherscan.
+\emph{Ethereum Gas Tracker}.
+URL: \url{https://etherscan.io/gastracker}.
+Снимок данных: 01.06.2026, 13:51 MSK.
+
+\bibitem{arbitrumRpc}
+Offchain Labs.
+\emph{Arbitrum One public RPC endpoint}.
+URL: \url{https://arb1.arbitrum.io/rpc}.
+Снимок данных: 01.06.2026, 13:51 MSK.
+
+\bibitem{arbitrumFees}
+Offchain Labs.
+\emph{Arbitrum Nitro: gas and fees}.
+URL: \url{https://docs.arbitrum.io/how-arbitrum-works/gas-fees}.
+\end{thebibliography}
+
+\end{document}
