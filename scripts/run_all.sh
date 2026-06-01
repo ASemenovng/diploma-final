@@ -13,7 +13,8 @@ for s in \
   run_lollipop305_backend.sh \
   run_mnt6_article640.sh \
   run_mnt6_article640_backend.sh \
-  run_mnt_cycle.sh; do
+  run_mnt_cycle.sh \
+  run_mnt4_merkle_fri_cost_model.sh; do
   echo
   echo "############################################################"
   echo "Запуск $s"
