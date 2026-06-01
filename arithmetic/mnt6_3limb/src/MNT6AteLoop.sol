@@ -213,6 +213,91 @@ library MNT6AteLoop {
         return MNT6PackedArithmetic.fq6Load(f);
     }
 
+    /// @notice Выполняет тот же packed-цикл Миллера, но потоково читает prepared-кэш из code-shards.
+    /// @dev Каждый shard является data-контрактом: его runtime-код содержит только очередной
+    ///      фрагмент сериализованных коэффициентов. Адреса фиксируются внешним verifier-ом.
+    ///      Функция держит в памяти один scratch arena и никогда не копирует полный кэш.
+    function millerLoopPreparedCodeShardsPacked(
+        MNT6PairingTypes.G1Point memory p,
+        MNT6PairingTypes.Fq3 memory qXOverTwist,
+        MNT6PairingTypes.Fq3 memory qYOverTwist,
+        address[] memory dblShards,
+        address[] memory addShards
+    ) internal view returns (MNT6PairingTypes.Fq6 memory) {
+        (uint256 dblShard, uint256 dblOff, uint256 dblSize) =
+            _initCodeShardStream(dblShards, MNT6_DBL_COUNT * DBL_STEP_BYTES);
+        (uint256 addShard, uint256 addOff, uint256 addSize) =
+            _initCodeShardStream(addShards, MNT6_ADD_COUNT * ADD_STEP_BYTES);
+
+        uint256 base = MNT6PackedArithmetic.arenaPtr(384);
+        uint256 f = base;
+        uint256 fSqr = base + 0x240;
+        uint256 next = base + 0x480;
+        uint256 pXTwist = base + 0x6c0;
+        uint256 pYTwist = base + 0x7e0;
+        uint256 qX = base + 0x900;
+        uint256 qY = base + 0xa20;
+        uint256 l1 = base + 0xb40;
+        uint256 yNeg = base + 0xc60;
+        uint256 cH = base + 0xd80;
+        uint256 c4C = base + 0xea0;
+        uint256 cJ = base + 0xfc0;
+        uint256 cL = base + 0x10e0;
+        uint256 addL1 = base + 0x1200;
+        uint256 addRZ = base + 0x1320;
+        uint256 g0 = base + 0x1440;
+        uint256 g1 = base + 0x1560;
+        uint256 tmp3 = base + 0x1680;
+        uint256 scratch = base + 0x17a0;
+
+        MNT6PackedArithmetic.fq6OneTo(f);
+        MNT6PackedArithmetic.zeroTo(pXTwist, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(pXTwist + 0x60, p.x);
+        MNT6PackedArithmetic.zeroTo(pYTwist, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(pYTwist + 0x60, p.y);
+        MNT6PackedArithmetic.fq3StoreTo(qX, qXOverTwist);
+        MNT6PackedArithmetic.fq3StoreTo(qY, qYOverTwist);
+        MNT6PackedArithmetic.zeroTo(tmp3, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(tmp3, p.x);
+        MNT6PackedArithmetic.fq3SubTo(l1, tmp3, qX);
+        MNT6PackedArithmetic.fq3NegTo(yNeg, qY);
+
+        for (uint256 i = 0; i < MNT6_DBL_COUNT; i++) {
+            (dblShard, dblOff, dblSize) =
+                _streamLoadFq3To(cH, dblShards, dblShard, dblOff, dblSize);
+            (dblShard, dblOff, dblSize) =
+                _streamLoadFq3To(c4C, dblShards, dblShard, dblOff, dblSize);
+            (dblShard, dblOff, dblSize) =
+                _streamLoadFq3To(cJ, dblShards, dblShard, dblOff, dblSize);
+            (dblShard, dblOff, dblSize) =
+                _streamLoadFq3To(cL, dblShards, dblShard, dblOff, dblSize);
+
+            MNT6PackedArithmetic.fq3SubTo(g0, cL, c4C);
+            MNT6PackedArithmetic.fq3MulTo(g1, cJ, pXTwist, scratch);
+            MNT6PackedArithmetic.fq3SubTo(g0, g0, g1);
+            MNT6PackedArithmetic.fq3MulTo(g1, cH, pYTwist, scratch);
+            MNT6PackedArithmetic.fq6SqrTo(fSqr, f, scratch);
+            MNT6PackedArithmetic.fq6MulByLineTo(next, fSqr, g0, g1, scratch);
+            (f, next) = (next, f);
+
+            int8 bit = loopDigit(i);
+            if (bit != 0) {
+                (addShard, addOff, addSize) =
+                    _streamLoadFq3To(addL1, addShards, addShard, addOff, addSize);
+                (addShard, addOff, addSize) =
+                    _streamLoadFq3To(addRZ, addShards, addShard, addOff, addSize);
+                MNT6PackedArithmetic.fq3MulTo(g0, addRZ, pYTwist, scratch);
+                MNT6PackedArithmetic.fq3MulTo(g1, bit == 1 ? qY : yNeg, addRZ, scratch);
+                MNT6PackedArithmetic.fq3MulTo(tmp3, l1, addL1, scratch);
+                MNT6PackedArithmetic.fq3AddTo(g1, g1, tmp3);
+                MNT6PackedArithmetic.fq3NegTo(g1, g1);
+                MNT6PackedArithmetic.fq6MulByLineTo(next, f, g0, g1, scratch);
+                (f, next) = (next, f);
+            }
+        }
+        return MNT6PackedArithmetic.fq6Load(f);
+    }
+
     /// @notice Формирует подготовленные данные `millerLoopPreparedBlobPackedResidue`, которые затем переиспользуются в цикле Миллера.
     function millerLoopPreparedBlobPackedResidue(
         MNT6PairingTypes.G1Point memory p,
@@ -390,6 +475,55 @@ library MNT6AteLoop {
     ) private pure returns (MNT6PairingTypes.Fq6 memory g) {
         g.c0 = MNT6Fq3.mul(ac.cRZ, pYTwist);
         g.c1 = MNT6Fq3.neg(MNT6Fq3.add(MNT6Fq3.mul(yOverTwist, ac.cRZ), MNT6Fq3.mul(l1Coeff, ac.cL1)));
+    }
+
+    /// @notice Проверяет целостность списка code-shards и создает курсор потокового чтения.
+    /// @dev Каждый shard выровнен по Fq3, поэтому один коэффициент никогда не пересекает
+    ///      границу двух data-контрактов. Это позволяет читать ровно 288 байт за шаг.
+    function _initCodeShardStream(address[] memory shards, uint256 expectedBytes)
+        private
+        view
+        returns (uint256, uint256, uint256 shardSize)
+    {
+        require(shards.length != 0, "no shards");
+        uint256 total;
+        for (uint256 i = 0; i < shards.length; ++i) {
+            uint256 size = _extCodeSize(shards[i]);
+            require(size != 0 && size % FQ3_BYTES == 0, "bad shard size");
+            total += size;
+        }
+        require(total == expectedBytes, "bad shard total");
+        shardSize = _extCodeSize(shards[0]);
+        return (0, 0, shardSize);
+    }
+
+    /// @notice Читает очередной Fq3 и переводит курсор к следующему коэффициенту.
+    function _streamLoadFq3To(
+        uint256 out,
+        address[] memory shards,
+        uint256 shardIdx,
+        uint256 offsetBytes,
+        uint256 shardSize
+    ) private view returns (uint256 nextShardIdx, uint256 nextOffsetBytes, uint256 nextShardSize) {
+        require(shardIdx < shards.length && offsetBytes + FQ3_BYTES <= shardSize, "bad stream");
+        MNT6PackedArithmetic.loadFq3FromCodeBETo(out, shards[shardIdx], offsetBytes);
+        nextShardIdx = shardIdx;
+        nextOffsetBytes = offsetBytes + FQ3_BYTES;
+        nextShardSize = shardSize;
+        if (nextOffsetBytes == shardSize) {
+            nextShardIdx++;
+            nextOffsetBytes = 0;
+            if (nextShardIdx < shards.length) {
+                nextShardSize = _extCodeSize(shards[nextShardIdx]);
+            }
+        }
+    }
+
+    /// @notice Возвращает размер runtime-кода data-контракта.
+    function _extCodeSize(address dataContract) private view returns (uint256 size) {
+        assembly ("memory-safe") {
+            size := extcodesize(dataContract)
+        }
     }
 
     /// @notice Выполняет внутреннюю операцию `_twistByFp`; параметры и результат используют представление текущей библиотеки.

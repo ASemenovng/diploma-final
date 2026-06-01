@@ -315,6 +315,32 @@ library MNT6PackedArithmetic {
         loadFpFromCalldataBETo(out + 2 * FP, blob, off + 0xc0);
     }
 
+    /// @notice Потоково читает один коэффициент Fq3 из runtime-кода data-контракта.
+    /// @dev Rust backend сериализует каждое поле как [d2,d1,d0], чтобы blob был читаемым
+    ///      и совпадал с JSON-fixture. Горячая арифметика использует обратный порядок
+    ///      [d0,d1,d2], поэтому после EXTCODECOPY слова каждого Fp разворачиваются.
+    ///      В отличие от копирования полного blob эта функция выделяет только один
+    ///      временный буфер Fq3 и переиспользует его на каждом шаге цикла Миллера.
+    function loadFq3FromCodeBETo(uint256 out, address dataContract, uint256 off) internal view {
+        uint256 tmp;
+        assembly ("memory-safe") {
+            tmp := mload(0x40)
+            extcodecopy(dataContract, tmp, off, 0x120)
+
+            mstore(out, mload(add(tmp, 0x40)))
+            mstore(add(out, 0x20), mload(add(tmp, 0x20)))
+            mstore(add(out, 0x40), mload(tmp))
+
+            mstore(add(out, 0x60), mload(add(tmp, 0xa0)))
+            mstore(add(out, 0x80), mload(add(tmp, 0x80)))
+            mstore(add(out, 0xa0), mload(add(tmp, 0x60)))
+
+            mstore(add(out, 0xc0), mload(add(tmp, 0x100)))
+            mstore(add(out, 0xe0), mload(add(tmp, 0xe0)))
+            mstore(add(out, 0x100), mload(add(tmp, 0xc0)))
+        }
+    }
+
     /// @notice Выполняет внутреннюю операцию `_w`; параметры и результат используют представление текущей библиотеки.
     function _w(uint256 p, uint256 i) private pure returns (uint256 x) {
         assembly ("memory-safe") {
