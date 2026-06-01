@@ -13,6 +13,8 @@
 | `implementations/article640_mnt4/` | Основная реализация идей ePrint 2024/640 для MNT4: calldata+commitment и fixed code-shards/EXTCODECOPY варианты, плюс Rust-бэкенд для генерации fixtures. |
 | `implementations/article640_mnt6/` | MNT6-753 Article640/residue реализация поверх общей MNT6-арифметики, плюс Rust-бэкенд fixtures. |
 | `implementations/lollipop305/` | Исследовательский lollipop-305 pipeline поверх общей 2-limb арифметики, Rust reference/backend и безопасный fixed-cache режим через зафиксированные code-shards. |
+| `implementations/mnt4_merkle_fri_cost_model/` | Актуальная математическая спецификация и Rust-модель стоимости блочно-сжатого ordinary-FRI пути. |
+| `implementations/research_variants/` | Воспроизводимые, но не выбранные исследовательские варианты. |
 | `baselines/naive_tate_mnt4/` | Наивный Tate baseline без optimized hot-path; используется как отрицательная точка отсчета. |
 | `mnt_cycle_full/` | Rust-модель MNT4/MNT6 cycle-native relations и constraints. |
 | `docs/` | Отчеты, планы, оценки сложности, краткие материалы для защиты. |
@@ -62,3 +64,9 @@ cd /Users/a.i.semenov/diploma-final
 В `src/` арифметических модулей оставлены только библиотеки, которые импортируются финальными реализациями сопряжения. Альтернативы, необходимые для сравнительных таблиц диплома, вынесены в `research_variants/` и подключаются только тестами. Типы, используемые исключительно тестовой инфраструктурой, размещены в `test_support/`.
 
 Полная MNT4-реализация сопряжения находится только в `implementations/full_onchain_mnt4/`. Она не дублируется внутри арифметического модуля: библиотека базовой арифметики остается общей зависимостью.
+
+Merkle/FRI-направление разделено аналогично: в
+`implementations/mnt4_merkle_fri_cost_model/` находится выбранная
+математическая модель стоимости, а исполняемый консервативный DEEP-FRI
+прототип перенесен в `implementations/research_variants/` как
+воспроизводимый отрицательный эксперимент.

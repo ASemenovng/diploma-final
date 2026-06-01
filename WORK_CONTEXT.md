@@ -660,7 +660,7 @@ cd /Users/a.i.semenov/diploma-final
 ## 2026-05-31: завершенная экспериментальная реализация Merkle/DEEP-FRI микротрассы
 
 - Создан изолированный модуль:
-  `implementations/mnt4_merkle_deep_fri`.
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace`.
   Исходный модуль `implementations/article640_mnt4` не изменялся и используется
   как baseline.
 - Rust backend реализует весь воспроизводимый pipeline:
@@ -669,7 +669,7 @@ cd /Users/a.i.semenov/diploma-final
   multiproof, Fiat--Shamir transcript, DEEP-значения, `8` FRI-folding раундов,
   сериализацию и самопроверку `proof.bin`.
 - Solidity-контракт
-  `implementations/mnt4_merkle_deep_fri/src/MNT4MerkleDeepFriVerifier.sol`
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace/src/MNT4MerkleDeepFriVerifier.sol`
   предоставляет метод
   `verifyEquationMicrotrace(P, R, c, cInv, proof)`.
   Он проверяет принадлежность точек кривой, `c * cInv = 1`, transcript,
@@ -703,9 +703,9 @@ cd /Users/a.i.semenov/diploma-final
   готовым монолитным Ethereum mainnet-контрактом без разбиения или сокращения
   bytecode.
 - Единый воспроизводимый запуск:
-  `implementations/mnt4_merkle_deep_fri/scripts/run_report.sh`.
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace/scripts/run_report.sh`.
   Подробный отчет:
-  `implementations/mnt4_merkle_deep_fri/docs/MNT4_MERKLE_DEEP_FRI_RESULTS_RU.md`.
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace/docs/MNT4_MERKLE_DEEP_FRI_RESULTS_RU.md`.
 
 ## 2026-05-31: независимый аудит стоимости Merkle/DEEP-FRI микротрассы
 
@@ -737,7 +737,7 @@ cd /Users/a.i.semenov/diploma-final
   `128`, подстановку `zeta` в `Fq4 = Fq[Z]/(Z^4-13)` и base-field relation
   checks. Эта схема еще не реализована.
 - Создан отчет:
-  `implementations/mnt4_merkle_deep_fri/docs/MNT4_MERKLE_DEEP_FRI_INDEPENDENT_AUDIT_RU.md`.
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace/docs/MNT4_MERKLE_DEEP_FRI_INDEPENDENT_AUDIT_RU.md`.
 - Дополнительное уточнение после сверки с оригинальной статьей ePrint
   `2024/640`: для защиты от подмены witness обязательна не конкретно
   DEEP-FRI-проверка полной временной микротрассы, а доказательство того, что
@@ -774,7 +774,7 @@ cd /Users/a.i.semenov/diploma-final
 - DEEP-FRI не проверяет новое математическое утверждение о цикле Миллера. Он добавляет раскрытие в точке вне исходного домена и улучшает надежность проверки близости к низкостепенному многочлену. Это может уменьшить требуемое число запросов, но добавляет OOD-значения, инверсии и дополнительную арифметику verifier-а.
 - Для EVM нельзя заранее считать DEEP-FRI более дешевым: экономию на числе Merkle-раскрытий нужно сравнивать с дополнительной арифметикой над трехсловным полем MNT4-753.
 - Следующая целевая реализация: block-compressed Merkle + обычный FRI. Один блок объединяет несколько шагов Миллера; relation проверяется через конкретные многочленные тождества, а FRI подтверждает низкую степень закоммиченных таблиц. После реализации необходимо добавить численную soundness-оценку и сравнить gas с опциональным DEEP-FRI-профилем.
-- Текущий модуль `implementations/mnt4_merkle_deep_fri` сохраняется как reference baseline микротрассы, но не считается оптимальной production-реализацией.
+- Текущий модуль `implementations/research_variants/mnt4_merkle_deep_fri_microtrace` сохраняется как reference baseline микротрассы, но не считается оптимальной production-реализацией.
 
 ## 2026-06-01: строгий production-профиль обычного FRI
 
@@ -783,7 +783,7 @@ cd /Users/a.i.semenov/diploma-final
 - Упрощенная запись `(1/16)^64 = 2^-256` из прежней спецификации не является достаточным доказательством soundness FRI и не должна использоваться как финальное обоснование.
 - Для smooth multiplicative RS-кодов применима доказанная оценка исходной статьи FRI: вероятность отклонения слова, достаточно далекого от кода, за одно повторение не меньше `delta0 >= (1 - 3*rho)/4 - 1/sqrt(N) - 3N/|F|`.
 - Для текущих параметров получается `delta0 ~= 0.1348853`. По консервативной оценке `(1 - delta0)^q <= 2^-128` требуется минимум `613` независимых повторений. Основной production-профиль следует округлить до `640` запросов. Профиль `64q` можно оставить только для исследовательского gas-сравнения.
-- Планируемая соседняя реализация: `implementations/mnt4_merkle_fri_block_compressed`. Она не изменяет существующий DEEP-FRI baseline.
+- Планируемая соседняя реализация: `implementations/mnt4_merkle_fri_cost_model`. Она не изменяет существующий DEEP-FRI baseline.
 - Обозначение `m` в оценке обычного FRI означает число независимых случайных FRI-запросов, также называемое числом повторений проверки. Это не число шагов Миллера и не число блочных переходов. Для ясности в коде и документации следует использовать имя `query_count`.
 
 ## 2026-06-01: блокирующий пробел block-compressed ordinary-FRI схемы
@@ -791,14 +791,14 @@ cd /Users/a.i.semenov/diploma-final
 - После согласования архитектуры и перед написанием кода проведена повторная проверка формализации. Формула сжатия пяти переходов корректна, но текущая спецификация не задает безопасный компактный способ связать агрегированные делители `G_t^Q(P)` и `G_t^S(-R)` с фиксированными `Q,S` и входными `P,R`.
 - Нельзя принимать агрегированные делители как произвольные динамические openings: prover сможет подобрать множитель, превращающий ложный переход в истинный. Merkle-root фиксирует выбранную таблицу, но не доказывает происхождение значений.
 - Наивное раскрытие всех коэффициентов подготовленного делителя и вычисление значения on-chain также неприемлемо: для блока `d=5` число коэффициентов имеет порядок до `2^(d+2)+1 = 129`, а production-профиль ordinary FRI требует `query_count = 640`.
-- Создан честный статус-модуль `implementations/mnt4_merkle_fri_block_compressed` без фиктивной реализации. Подробности: `implementations/mnt4_merkle_fri_block_compressed/docs/BLOCK_COMPRESSED_FRI_FORMALIZATION_GAP_RU.md`.
+- Создан честный статус-модуль `implementations/mnt4_merkle_fri_cost_model` без фиктивной реализации. Подробности: `implementations/mnt4_merkle_fri_cost_model/docs/BLOCK_COMPRESSED_FRI_FORMALIZATION_GAP_RU.md`.
 - Перед кодом требуется выбрать и формализовать один из вариантов:
   1. обычный FRI поверх уже определенной пошаговой трассы;
   2. полноценная схема сжатых делителей `g_t(x,y)=a_t(x)+y*b_t(x)` с конкретным opening layer, low-degree proof и полной оценкой calldata/gas.
 
 ## 2026-06-01: формализация block-compressed ordinary-FRI с трассой Горнера
 
-- Вариант со сжатыми делителями формализован в `implementations/mnt4_merkle_fri_block_compressed/docs/MNT4_BLOCK_COMPRESSED_ORDINARY_FRI_FORMAL_SPEC_RU.md`.
+- Вариант со сжатыми делителями формализован в `implementations/mnt4_merkle_fri_cost_model/docs/MNT4_BLOCK_COMPRESSED_ORDINARY_FRI_FORMAL_SPEC_RU.md`.
 - Для фиксированных `Q,S` Rust-индексатор однократно строит канонические делители блоков:
   `g_b^U(x,y) = a_b^U(x) + y*b_b^U(x)`, `U in {Q,S}`.
   Каждый делитель равен произведению реальных линий пяти шагов с весами `16,8,4,2,1`, редуцированному по уравнению кривой.
@@ -815,7 +815,7 @@ cd /Users/a.i.semenov/diploma-final
 ## 2026-06-01: исследование упрощения Merkle/FRI verifier-а
 
 - Создан документ:
-  `implementations/mnt4_merkle_fri_block_compressed/docs/MNT4_MERKLE_FRI_SIMPLIFICATION_STUDY_RU.md`.
+  `implementations/mnt4_merkle_fri_cost_model/docs/MNT4_MERKLE_FRI_SIMPLIFICATION_STUDY_RU.md`.
 - Формально доказать непрактичность всего класса `Merkle + FRI` нельзя.
   Отрицательный результат относится к прежней row-major трассе Горнера: ее
   calldata lower bound равен `138,018,816 gas` без FRI-слоев, Merkle-frontier
@@ -852,7 +852,7 @@ cd /Users/a.i.semenov/diploma-final
 ## 2026-06-01: второй проход архитектурного упрощения Merkle/FRI
 
 - Создан документ:
-  `implementations/mnt4_merkle_fri_block_compressed/docs/MNT4_MERKLE_FRI_ARCHITECTURAL_REFINEMENT_RU.md`.
+  `implementations/mnt4_merkle_fri_cost_model/docs/MNT4_MERKLE_FRI_ARCHITECTURAL_REFINEMENT_RU.md`.
 - Исследован более сильный, но рискованный кандидат: разделить поле MNT4-вычисления и
   поле прозрачного proof layer. MNT4-753 арифметика задается limb/carry/range
   AIR-ограничениями, а PCS/FRI выполняется над EVM-дружественным однословным
@@ -914,7 +914,7 @@ cd /Users/a.i.semenov/diploma-final
   `Fq(MNT4-753)`. BN254 limb/carry AIR, Groth16 и KZG over BN254 в этот
   модуль не входят.
 - Полная целевая спецификация:
-  `implementations/mnt4_merkle_fri_block_compressed/docs/MNT4_NATIVE_FIELD_OPTIMIZED_MERKLE_FRI_SPEC_RU.md`.
+  `implementations/mnt4_merkle_fri_cost_model/docs/MNT4_NATIVE_FIELD_OPTIMIZED_MERKLE_FRI_SPEC_RU.md`.
 - Короткий design wrapper:
   `docs/superpowers/specs/2026-06-01-mnt4-native-field-optimized-merkle-fri-design.md`.
 - Проверяемый API:
@@ -953,13 +953,13 @@ cd /Users/a.i.semenov/diploma-final
 - Для эксперимента открыта ветка:
   `codex/mnt4-native-fri-cost-model`.
 - Реализован Rust crate:
-  `implementations/mnt4_merkle_fri_block_compressed/rust/native_fri_cost_model`.
+  `implementations/mnt4_merkle_fri_cost_model/rust/native_fri_cost_model`.
 - Команда запуска:
-  `implementations/mnt4_merkle_fri_block_compressed/scripts/run_cost_model.sh`.
+  `implementations/mnt4_merkle_fri_cost_model/scripts/run_cost_model.sh`.
 - Машиночитаемый отчет:
-  `implementations/mnt4_merkle_fri_block_compressed/artifacts/native-field-cost-model/report.json`.
+  `implementations/mnt4_merkle_fri_cost_model/artifacts/native-field-cost-model/report.json`.
 - Читаемый отчет:
-  `implementations/mnt4_merkle_fri_block_compressed/docs/N1_NATIVE_FIELD_COST_MODEL_RESULTS_RU.md`.
+  `implementations/mnt4_merkle_fri_cost_model/docs/N1_NATIVE_FIELD_COST_MODEL_RESULTS_RU.md`.
 - Модель проверяет strict ordinary-FRI профиль по формуле формальной
   спецификации:
   `rho=1/8`, `delta0=0.1507257`, минимум `544` запроса, production-профиль
@@ -978,3 +978,22 @@ cd /Users/a.i.semenov/diploma-final
 - Модельные параметры, которые должны быть заменены измерением Solidity на
   следующих этапах: ширина source leaf, число локальных `Fq`-умножений,
   Keccak/parser budget и control-flow overhead.
+
+## 2026-06-01: очистка MNT4 Merkle/FRI модулей
+
+- Актуальная модель стоимости переименована в
+  `implementations/mnt4_merkle_fri_cost_model`.
+- Архивный исполняемый DEEP-FRI прототип перенесен в
+  `implementations/research_variants/mnt4_merkle_deep_fri_microtrace`.
+- В основном каталоге Merkle/FRI-направления остается только защищаемый
+  результат: математическая спецификация, Rust-модель стоимости и отчет.
+- Для итогового текста используется строгая ordinary-FRI модель стоимости:
+  нижняя оценка `51,359,352 gas`, ожидаемая модельная оценка
+  `78,340,624 gas`, обязательная calldata `2,072,224 bytes`.
+- Полная Solidity-реализация блочно-сжатого ordinary-FRI verifier-а не
+  продолжается: модель не показывает принципиального выигрыша относительно
+  Article640 fixed-shards. Консервативная исполняемая DEEP-FRI микротрасса
+  сохранена только как воспроизводимый отрицательный эксперимент.
+- Архивный `scripts/run_report.sh` пересобирает fixtures во временном каталоге
+  `.reports/`, сравнивает детерминированные файлы с tracked-эталонами и не
+  изменяет git-дерево из-за нестабильных `provingMs` и peak RSS.
