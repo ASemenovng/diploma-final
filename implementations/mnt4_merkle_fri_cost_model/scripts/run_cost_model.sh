@@ -10,4 +10,3 @@ cargo run --release
 printf '\nОтчеты:\n'
 printf '  JSON: %s\n' "${MODULE_DIR}/artifacts/native-field-cost-model/report.json"
 printf '  Markdown: %s\n' "${MODULE_DIR}/docs/N1_NATIVE_FIELD_COST_MODEL_RESULTS_RU.md"
-

@@ -10,4 +10,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "native_fri_cost_model"
 path = "src/main.rs"
-
