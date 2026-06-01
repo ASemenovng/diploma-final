@@ -1,4 +1,8 @@
-# MNT4-753 block-compressed Merkle/FRI verifier
+# MNT4-753 Merkle/FRI: модель стоимости
+
+Этот каталог содержит математическую спецификацию и воспроизводимую
+Rust-модель стоимости блочно-сжатой проверки цикла Миллера через Merkle и
+обычный FRI. Он не содержит готовый production Solidity-verifier.
 
 Статус: математический пробел устранен формальной спецификацией:
 
@@ -40,5 +44,7 @@ artifacts/native-field-cost-model/report.json
 docs/N1_NATIVE_FIELD_COST_MODEL_RESULTS_RU.md
 ```
 
-Solidity verifier не входит в N1. Его реализация начинается только после
-stop/go решения по Rust-модели.
+По результатам stop/go решения Solidity verifier не реализуется: строгая
+ordinary-FRI модель не дает принципиального выигрыша относительно
+`Article640 fixed-shards`. Каталог сохраняет воспроизводимое обоснование этого
+отрицательного результата.
