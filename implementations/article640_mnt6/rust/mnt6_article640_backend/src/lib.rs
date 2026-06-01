@@ -1,4 +1,4 @@
-use ark_ec::{pairing::Pairing, CurveGroup, PrimeGroup, models::short_weierstrass::SWCurveConfig};
+use ark_ec::{models::short_weierstrass::SWCurveConfig, pairing::Pairing, CurveGroup, PrimeGroup};
 use ark_ff::{AdditiveGroup, BigInteger, Field, PrimeField};
 use ark_mnt6_753::{g1, g2, Fq, Fq3, Fq6, G1Prepared, G1Projective, G2Prepared, G2Projective, MNT6_753};
 use ark_serialize::CanonicalSerialize;
@@ -75,12 +75,30 @@ pub struct PreparedJson {
     pub final_exp_blob: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EquationJson {
+    pub p: G1Json,
+    pub r: G1Json,
+    pub q: G2Json,
+    pub s: G2Json,
+    pub q_x_over_twist: Fq3Json,
+    pub q_y_over_twist: Fq3Json,
+    pub s_x_over_twist: Fq3Json,
+    pub s_y_over_twist: Fq3Json,
+    pub q_dbl_blob: String,
+    pub q_add_blob: String,
+    pub s_dbl_blob: String,
+    pub s_add_blob: String,
+    pub miller_product: Fq6Json,
+    pub final_exp_is_one: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FixtureJson {
     pub constants: ConstantsJson,
     pub arithmetic: ArithmeticVectorJson,
     pub miller_step: MillerStepJson,
     pub residue: ResidueJson,
     pub prepared: PreparedJson,
+    pub equation: EquationJson,
 }
 
 pub fn build_fixture() -> FixtureJson {
@@ -114,6 +132,15 @@ pub fn build_fixture() -> FixtureJson {
     let add_blob = pack_adds(&q_prep.addition_coefficients);
     let full_miller_blob = pack_fq6(&full_miller);
     let final_exp_blob = pack_fq6(&final_exp);
+    let equation_p = (G1Projective::generator() + G1Projective::generator()).into_affine();
+    let equation_r = G1Projective::generator().into_affine();
+    let equation_q = G2Projective::generator().into_affine();
+    let equation_s = (G2Projective::generator() + G2Projective::generator()).into_affine();
+    let equation_q_prep = G2Prepared::from(equation_q);
+    let equation_s_prep = G2Prepared::from(equation_s);
+    let equation_miller = MNT6_753::multi_miller_loop([equation_p, -equation_r], [equation_q, equation_s]).0;
+    let equation_final =
+        MNT6_753::final_exponentiation(ark_ec::pairing::MillerLoopOutput::<MNT6_753>(equation_miller)).unwrap().0;
 
     FixtureJson {
         constants: ConstantsJson {
@@ -171,6 +198,22 @@ pub fn build_fixture() -> FixtureJson {
             final_exp: fq6_json(&final_exp),
             final_exp_blob,
         },
+        equation: EquationJson {
+            p: G1Json { x: fp_json(&equation_p.x), y: fp_json(&equation_p.y) },
+            r: G1Json { x: fp_json(&equation_r.x), y: fp_json(&equation_r.y) },
+            q: G2Json { x: fq3_json(&equation_q.x), y: fq3_json(&equation_q.y) },
+            s: G2Json { x: fq3_json(&equation_s.x), y: fq3_json(&equation_s.y) },
+            q_x_over_twist: fq3_json(&equation_q_prep.x_over_twist),
+            q_y_over_twist: fq3_json(&equation_q_prep.y_over_twist),
+            s_x_over_twist: fq3_json(&equation_s_prep.x_over_twist),
+            s_y_over_twist: fq3_json(&equation_s_prep.y_over_twist),
+            q_dbl_blob: pack_doubles(&equation_q_prep.double_coefficients),
+            q_add_blob: pack_adds(&equation_q_prep.addition_coefficients),
+            s_dbl_blob: pack_doubles(&equation_s_prep.double_coefficients),
+            s_add_blob: pack_adds(&equation_s_prep.addition_coefficients),
+            miller_product: fq6_json(&equation_miller),
+            final_exp_is_one: equation_final == Fq6::ONE,
+        },
     }
 }
 
@@ -217,6 +260,19 @@ fn modinv(a: &num_bigint::BigUint, m: &num_bigint::BigUint) -> num_bigint::BigUi
     }
     if t < BigInt::zero() { t += m.to_bigint().unwrap(); }
     t.to_biguint().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn article640_equation_fixture_is_nontrivial_and_satisfies_relation() {
+        let fixture = build_fixture();
+        assert!(fixture.equation.final_exp_is_one);
+        assert_ne!(fixture.equation.p.x.d0, fixture.equation.r.x.d0);
+        assert_ne!(fixture.equation.q.x.c0.d0, fixture.equation.s.x.c0.d0);
+    }
 }
 
 
