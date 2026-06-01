@@ -1252,6 +1252,41 @@ Merkle/FRI expected model & 78,340,624 & \$45.67 & \$3.11 \\
 folding.
 \end{quote}
 
+\subsection{Закрытие замечаний предыдущего отчета}
+
+\begin{longtable}{p{0.28\linewidth}p{0.63\linewidth}}
+\caption{Соответствие выполненной работы замечаниям руководителя}\\
+\toprule
+Замечание & Что выполнено \\
+\midrule
+\endfirsthead
+\toprule
+Замечание & Что выполнено \\
+\midrule
+\endhead
+Сравнить алгоритмы умножения и редукции &
+Реализованы и измерены Montgomery/CIOS, Barrett, FIOS, Comba/SOS,
+square-Comba, lazy reduction и branchless reduction. Для башен расширений
+исследованы Karatsuba и специальные умножения на нерезиденты. \\
+\addlinespace
+Обосновать оптимальность реализации &
+Построена opcode-only нижняя граница 3-limb умножения, реализован ручной
+all-stack Yul hot path, исследованы pointer/packed API, scratch arena,
+fused sparse multiplication и потоковое чтение code-shards. После fused
+оптимизации локальный резерв улучшения составляет доли процента полного
+Miller path. \\
+\addlinespace
+Дать оценки сложности &
+Оценки построены на нескольких уровнях: EVM opcode, $F_q$,
+$F_{q^2}/F_{q^4}$ и $F_{q^3}/F_{q^6}$ операции, число Miller rounds,
+стоимость FE, calldata, Merkle paths и constraints.  \\
+\addlinespace
+Исследовать более совершенные техники &
+Реализованы shared multi-Miller accumulator, prepared sparse lines,
+residue-проверка FE, KZG-opening, Merkle/FRI эксперимент, FRI cost model, MNT4/MNT6 cycle-native accounting и lollipop-305 по ePrint 2024/1627. \\
+\bottomrule
+\end{longtable}
+
 \begin{thebibliography}{9}
 \bibitem{eprint640}
 Andrija Novakovic, Liam Eagen.
