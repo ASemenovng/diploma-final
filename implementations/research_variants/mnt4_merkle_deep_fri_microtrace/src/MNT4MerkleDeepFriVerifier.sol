@@ -12,18 +12,33 @@ import {MNT4DeepFriTranscript as Transcript} from "./MNT4DeepFriTranscript.sol";
 ///      Профили предназначены для воспроизводимого gas-эксперимента; production-стойкость требует
 ///      отдельного криптографического аудита security_report.json.
 contract MNT4MerkleDeepFriVerifier {
+    // Реальная микротрасса дополняется нулями до 2048 строк. Затем каждый
+    // столбец продолжается на LDE-домен размером 32768 = 2048 * 16.
     uint256 private constant TRACE_SIZE = 2048;
     uint256 private constant LDE_SIZE = 32768;
     uint256 private constant BLOWUP = 16;
+
+    // Число столбцов в трех таблицах, которые связываются Merkle-корнями:
+    // фиксированное расписание операций, изменяемая трасса и quotient.
     uint256 private constant FIXED_COLUMNS = 17;
     uint256 private constant TRACE_COLUMNS = 4;
     uint256 private constant QUOTIENT_COLUMNS = 2;
+
+    // После семи опубликованных FRI-слоев остается многочлен степени < 8.
+    // Его восемь коэффициентов передаются напрямую в заголовке proof.
     uint256 private constant FRI_LEVELS = 7;
     uint256 private constant FINAL_COEFFICIENTS = 8;
+
+    // Канонический элемент 753-битного поля занимает три 32-байтовых слова.
     uint256 private constant FQ_BYTES = 96;
 
+    // CONFIG_DIGEST связывает формат proof и фиксированные параметры схемы.
+    // ROOT_FIXED коммитится к подготовленным линиям для неизменных Q и S.
     bytes32 public immutable CONFIG_DIGEST;
     bytes32 public immutable ROOT_FIXED;
+
+    // Генераторы доменов хранятся в Montgomery-представлении и используются
+    // только для восстановления точек открытия и FRI-folding.
     FF.Fp private OMEGA;
     FF.Fp private ETA;
     FF.Fp private GAMMA;
@@ -47,6 +62,8 @@ contract MNT4MerkleDeepFriVerifier {
         Fq y;
     }
 
+    /// @dev Первая часть бинарного proof. Содержит корни закоммиченных таблиц,
+    ///      значения вне домена и коэффициенты последнего FRI-многочлена.
     struct Header {
         uint8 profile;
         uint8 queryCount;
@@ -61,6 +78,8 @@ contract MNT4MerkleDeepFriVerifier {
         uint256 cursor;
     }
 
+    /// @dev Обратные элементы, которые Rust-бэкенд передает для одной точки
+    ///      запроса. Контракт не доверяет им и проверяет каждое произведение.
     struct Helper {
         FF.Fp xInv;
         FF.Fp xMinusZInv;
@@ -69,6 +88,8 @@ contract MNT4MerkleDeepFriVerifier {
         FF.Fp negXMinusOmegaZInv;
     }
 
+    /// @dev Fiat--Shamir испытания, детерминированно полученные из public input
+    ///      и Merkle-корней. Пользователь не может выбирать их после коммитмента.
     struct Challenges {
         FF.Fp beta;
         FF.Fp z;
@@ -116,6 +137,8 @@ contract MNT4MerkleDeepFriVerifier {
         FF.Fp4 memory cInv = _mont4(cInvCanonical);
         require(FF.fp4Equal(FF.fp4Mul(c, cInv), FF.fp4One()), "bad c inverse");
 
+        // Этап 1. Разобрать заголовок и восстановить непредсказуемые испытания
+        // из transcript. Затем проверить quotient-отношение вне LDE-домена.
         Header memory header = _parseHeader(proof);
         require(header.profile == 1 || header.profile == 2, "bad profile");
         require(header.queryCount == (header.profile == 1 ? 32 : 128), "bad query count");
@@ -123,6 +146,8 @@ contract MNT4MerkleDeepFriVerifier {
             _deriveChallenges(header, pCanonical, rCanonical, cCanonical, cInvCanonical);
         require(_checkOod(header.ood, px, py, rx, ry, c, cInv, ch.beta, ch.z), "bad OOD quotient");
 
+        // Этап 2. Прочитать вспомогательные обратные элементы и компактные
+        // Merkle-multiproof для трассы, фиксированной таблицы и FRI-слоев.
         uint256 cursor = header.cursor;
         Helper[] memory helpers = new Helper[](queries.length);
         for (uint256 i; i < helpers.length; ++i) {
@@ -143,12 +168,18 @@ contract MNT4MerkleDeepFriVerifier {
             (friSections[level - 1], cursor) = _parseSection(proof, cursor, positions, FQ_BYTES, true);
         }
         require(cursor == proof.length, "proof tail");
+
+        // Этап 3. Проверить, что раскрытые строки действительно принадлежат
+        // таблицам, к которым prover зафиксировал Merkle-корни.
         require(Merkle.verify(0x01, header.rootTrace, LDE_SIZE, traceSection), "trace Merkle");
         require(Merkle.verify(0x02, ROOT_FIXED, LDE_SIZE, fixedSection), "fixed Merkle");
         require(Merkle.verify(0x03, header.rootQuotient, LDE_SIZE, quotientSection), "quotient Merkle");
         for (uint256 level; level < FRI_LEVELS; ++level) {
             require(Merkle.verify(uint8(0x11 + level), header.rootFri[level], LDE_SIZE >> (level + 1), friSections[level]), "FRI Merkle");
         }
+
+        // Этап 4. Пересчитать DEEP-значения в выбранных точках, проверить
+        // последовательные FRI-folding переходы и связать их с rootDeep.
         deepSection.payloads = _verifyQueries(
             queries, helpers, traceSection, fixedSection, quotientSection, friSections, header, ch
         );
@@ -161,6 +192,8 @@ contract MNT4MerkleDeepFriVerifier {
         view
         returns (Challenges memory ch, uint256[] memory queries)
     {
+        // Порядок absorb/challenge обязан байт-в-байт совпадать с Rust backend.
+        // Любая перестановка корней изменила бы все последующие запросы.
         Transcript.State memory transcript = Transcript.init();
         Transcript.absorb(transcript, "public", _publicBytes(header.profile, p, r, c, cInv));
         Transcript.absorb(transcript, "trace-root", abi.encodePacked(header.rootTrace));
@@ -192,6 +225,9 @@ contract MNT4MerkleDeepFriVerifier {
         FF.Fp memory beta,
         FF.Fp memory z
     ) private pure returns (bool) {
+        // Проверяется полиномиальное тождество
+        // quotient(z) * (z^TRACE_SIZE - 1) = AIR_numerator(z).
+        // Точка z выводится из transcript и лежит вне исходного домена.
         FF.Fp[] memory traceZ = _sliceFp(ood, 0, 4);
         FF.Fp[] memory traceNext = _sliceFp(ood, 4, 4);
         FF.Fp[] memory fixedZ = _sliceFp(ood, 8, 17);
@@ -211,6 +247,8 @@ contract MNT4MerkleDeepFriVerifier {
         Header memory header,
         Challenges memory ch
     ) private view returns (bytes[] memory deepPayloads) {
+        // Для каждой Fiat--Shamir позиции проверяются раскрытия x и -x,
+        // DEEP-композиция и цепочка FRI-folding до последнего многочлена.
         deepPayloads = new bytes[](traceSection.positions.length);
         for (uint256 i; i < queries.length; ++i) {
             FF.Fp memory x = FF.mul(GAMMA, FF.powSmall(ETA, queries[i]));
@@ -284,6 +322,9 @@ contract MNT4MerkleDeepFriVerifier {
         FF.Fp4 memory cInv,
         FF.Fp memory beta
     ) private pure returns (FF.Fp memory out) {
+        // fixedRow[0..8] выбирает одну допустимую микрооперацию residue-трассы:
+        // квадрат, умножения на линии, c, c^-1, Frobenius(c^-1) или no-op.
+        // Бета агрегирует координатные равенства в одно полевое выражение.
         FF.Fp4 memory state = _fp4(current);
         FF.Fp4[9] memory expected;
         expected[0] = FF.fp4Sqr(state);
@@ -361,6 +402,8 @@ contract MNT4MerkleDeepFriVerifier {
     }
 
     function _parseHeader(bytes calldata proof) private pure returns (Header memory header) {
+        // Бинарный формат фиксирован Rust-сериализатором: magic, version,
+        // профиль, размеры доменов, Merkle-корни, OOD bundle, final polynomial.
         require(proof.length >= 3696, "short proof");
         require(_u32(proof, 0) == 0x4d344446, "bad magic");
         require(_u16(proof, 4) == 1, "bad version");
@@ -423,6 +466,8 @@ contract MNT4MerkleDeepFriVerifier {
     }
 
     function _queries(bytes32 seed, uint256 count) private pure returns (uint256[] memory out) {
+        // Запросы выводятся без повторений и сразу сортируются. Благодаря этому
+        // один Merkle-multiproof может дедуплицировать общие ветви дерева.
         out = new uint256[](count);
         uint256 length;
         for (uint32 counter; length < count; ++counter) {
@@ -470,6 +515,7 @@ contract MNT4MerkleDeepFriVerifier {
     }
 
     function _physical(uint256 exponent, uint256 width) private pure returns (uint256 out) {
+        // LDE-таблицы сериализованы в bit-reversed порядке, совпадающем с Rust.
         uint256 bits;
         while ((1 << bits) < width) ++bits;
         for (uint256 i; i < bits; ++i) { out = (out << 1) | (exponent & 1); exponent >>= 1; }
@@ -528,6 +574,8 @@ contract MNT4MerkleDeepFriVerifier {
         view
         returns (bytes memory)
     {
+        // Эти байты входят в transcript до первого Merkle-корня. Поэтому proof
+        // нельзя повторно использовать после подмены P, R, c или c^-1.
         return abi.encodePacked(
             uint16(1), profile, CONFIG_DIGEST, ROOT_FIXED,
             p.x.d2, p.x.d1, p.x.d0, p.y.d2, p.y.d1, p.y.d0,

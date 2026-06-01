@@ -8,12 +8,16 @@ import {BigIntMNT} from "@arith-mnt4/BigIntMNT.sol";
 ///      Внешний proof хранит канонические значения big-endian; функция `fromBytes` выполняет
 ///      строгую проверку каноничности и единственный перевод в Montgomery-представление.
 library MNT4DeepFriField {
+    // Модуль базового поля q MNT4-753, разбитый на три 256-битных слова.
     uint256 internal constant P0 = 0x685acce9767254a4638810719ac425f0e39d54522cdd119f5e9063de245e8001;
     uint256 internal constant P1 = 0x7fdb925e8a0ed8d99d124d9a15af79db117e776f218059db80f0da5cb537e38;
     uint256 internal constant P2 = 0x1c4c62d92c41110229022eee2cdadb7f997505b8fafed5eb7e8f96c97d873;
+    // Montgomery-представление единицы: R mod q, где R = 2^768.
     uint256 internal constant ONE0 = 0x79589819c788b60197c3e4a0cd14572e91cd31c65a03468698a8ecabd9dc6f42;
     uint256 internal constant ONE1 = 0x598b4302d2f00a62320c3bb7133385591e0f4d8acf031d68ed269c942108976f;
     uint256 internal constant ONE2 = 0x7b479ec8e24295455fb31ff9a1950fa47edb3865e88c4074c9cbfd8ca621;
+    // Константы Фробениуса для башни Fq2/Fq4. Они позволяют заменить
+    // возведение в степень q несколькими умножениями в базовом поле.
     uint256 internal constant FROB_FQ2_0 = 0xef0234cfaee99ea2cbc42bd0cdafcec251d0228bd2d9cb18c5e777324a8210bf;
     uint256 internal constant FROB_FQ2_1 = 0xae72762315b0e32b67c4e9228e277244930899ec2314e834cae87111aa4ae6c8;
     uint256 internal constant FROB_FQ2_2 = 0x1497e8ec9e1ce7add306fcee92c18a85518752329c7611e431f2d6f0b3251;
@@ -47,6 +51,8 @@ library MNT4DeepFriField {
     }
 
     function fromCanonicalWords(uint256 d2, uint256 d1, uint256 d0) internal pure returns (Fp memory out) {
+        // Неканонические представления запрещены: иначе одно значение поля
+        // могло бы иметь несколько байтовых кодировок в Merkle-дереве.
         require(isCanonical(d2, d1, d0), "non-canonical Fq");
         (out.d0, out.d1, out.d2) = BigIntMNT.toMontgomery3(d0, d1, d2);
     }
@@ -111,6 +117,8 @@ library MNT4DeepFriField {
     }
 
     function powSmall(Fp memory base, uint256 exponent) internal pure returns (Fp memory out) {
+        // Используется только для степеней, связанных с доменом FRI.
+        // Для больших криптографических экспонент этот общий цикл не подходит.
         out = one();
         while (exponent != 0) {
             if (exponent & 1 != 0) out = mul(out, base);

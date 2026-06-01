@@ -4,6 +4,8 @@ pragma solidity 0.8.33;
 /// @notice Проверка детерминированного компактного Merkle-multiproof.
 /// @dev Позиции листьев не передаются пользователем: основной verifier выводит их из Fiat--Shamir запросов.
 library MNT4DeepFriMerkle {
+    /// @dev Один multiproof хранит отсортированные позиции раскрываемых листьев,
+    ///      их payload и минимальный frontier из недостающих соседних хешей.
     struct Section {
         uint256[] positions;
         bytes[] payloads;
@@ -15,6 +17,9 @@ library MNT4DeepFriMerkle {
         pure
         returns (bool)
     {
+        // На каждом уровне уже раскрытые соседние листья объединяются без
+        // повторной передачи. Для отсутствующего соседа расходуется один
+        // очередной элемент frontier. В конце не должно остаться лишних хешей.
         if (section.positions.length != section.payloads.length || leafCount == 0 || leafCount & (leafCount - 1) != 0) return false;
         uint256 length = section.positions.length;
         uint256[] memory indexes = new uint256[](length);
@@ -64,11 +69,12 @@ library MNT4DeepFriMerkle {
     }
 
     function hashLeaf(uint8 tag, uint256 index, bytes memory payload) internal pure returns (bytes32) {
+        // Префикс 0x00 отделяет лист от внутреннего узла; tag отделяет таблицы.
         return keccak256(abi.encodePacked(bytes1(0x00), tag, uint32(index), uint32(payload.length), payload));
     }
 
     function hashNode(uint8 tag, uint8 level, bytes32 left, bytes32 right) internal pure returns (bytes32) {
+        // Уровень включен в хеш, чтобы исключить неоднозначность структуры.
         return keccak256(abi.encodePacked(bytes1(0x01), tag, level, left, right));
     }
 }
-
