@@ -14,11 +14,11 @@
 
 ## 2. Команды воспроизведения
 
-Наивный baseline:
+Наивная cost model:
 
 ```bash
-cd /Users/a.i.semenov/mnt4-pairing-final/naive_tate_baseline
-forge test --match-path test/MNT4TatePairingNaive.t.sol -vv --gas-report
+cd baselines/naive_tate_mnt4
+../../scripts/run_naive_tate.sh
 ```
 
 Основная ladder-таблица:
@@ -58,12 +58,17 @@ forge test --match-path test/MNT4ExtensionV3Final.t.sol \
 
 | Шаг | Оптимизация | Описание | Результат по gas | Снижение |
 |---:|---|---|---:|---:|
-| 0 | Naive Tate baseline | Generic Solidity `Fq/Fq2/Fq4`, полный Tate loop, полный `Fq4` line, binary final exponentiation | 2,548,394,681 | — |
+| 0 | Naive Tate cost model | Generic Solidity `Fq/Fq2/Fq4`, модель полного Tate loop, полный `Fq4` line, binary final exponentiation | 2,548,394,681 | — |
 | 1 | Полный optimized fixed-Q on-chain | Применены Yul/CIOS arithmetic, Ate loop, Karatsuba, cheap non-residue multiplication, optimized FE; линии строятся on-chain | 258,753,182 | 89.85% |
 | 2 | Fixed-Q prepared sparse blob | Коэффициенты линий подготовлены заранее, передаются как blob, Miller accumulator и FE остаются on-chain | 79,588,799 | 69.24% |
 | 3 | Fixed-Q prepared sparse code-shards | Тот же prepared sparse путь, но кэш читается из data-контрактов через `EXTCODECOPY` | 79,586,596 | 0.003% |
 
-Вывод по интегральной таблице: основной переход происходит в два больших этапа. Сначала наивная арифметика и полный Tate loop заменяются optimized on-chain схемой, что снижает стоимость примерно в 9.85 раза. Затем перенос line generation из on-chain в prepared sparse cache снижает стоимость еще примерно в 3.25 раза.
+Первая строка является строгой нижней экстраполяцией измеренных микроблоков,
+а не полным исполняемым вызовом. Вывод по интегральной таблице: основной
+переход происходит в два больших этапа. Сначала наивная арифметика и полный
+Tate loop заменяются optimized on-chain схемой, что снижает стоимость примерно
+в 9.85 раза. Затем перенос line generation из on-chain в prepared sparse cache
+снижает стоимость еще примерно в 3.25 раза.
 
 ## 4. Арифметическая лестница: `Fq/Fq2/Fq4`
 
@@ -229,7 +234,7 @@ Prepared sparse coefficients можно передавать двумя спос
 
 | Оптимизация | Описание | Результат по gas | Снижение |
 |---|---|---:|---:|
-| Naive Tate baseline | Полностью наивная модель без специальных оптимизаций | `2,548,394,681` | — |
+| Naive Tate cost model | Строгая нижняя экстраполяция измеренных наивных микроблоков | `2,548,394,681` | — |
 | Montgomery/CIOS arithmetic | Базовое `Fq.mul` вместо pure Solidity multi-limb | `18,770 -> 2,959` | 84.24% |
 | Ate loop вместо полного Tate loop | Сокращение длины Miller loop | `912,988,940 -> 427,284,953` | 53.20% |
 | Karatsuba extension arithmetic | Меньше вложенных умножений в `Fq2/Fq4` | `Fq4.mul: 486,819 -> 42,764` | 91.22% |

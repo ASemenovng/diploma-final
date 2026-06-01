@@ -79,14 +79,17 @@ cd /Users/a.i.semenov/diploma-final
 | MNT4 prepared | prepared sparse blob | 79,726,321 |
 | MNT4 prepared | prepared sparse code-shards | 80,140,929 |
 | Article640 MNT4 | residue equation, calldata | 93,881,355 |
-| Article640 MNT4 | residue equation, fixed-shards | 93,705,233 |
+| Article640 MNT4 | residue equation, fixed-shards с проверкой G1 | 93,734,789 |
 | Article640 MNT4 | residue equation, calldata+commitment | 93,974,409 |
-| MNT6 | packed residue path | 103,294,551 |
+| MNT6 | fixed-shards bool equation с проверкой G1 и полной optimized FE | 226,073,973 |
 | lollipop-305 | Ehat ate residue verifier | 106,457,927 |
 | lollipop-305 | Ehat Weil equation | 201,002,138 |
 
 ## 5. Ограничения
 
-В `implementations/article640_mnt6/test/MNT6FullMillerBlob.t.sol` оставлены `disabled...` диагностические функции для полного uncompressed blob-loop. Они не входят в обычный `forge test`, потому что требуют порядка `1B gas` и служат отрицательным сценарием, а не рабочей реализацией.
+В `implementations/article640_mnt6` диагностические residue-фрагменты сохранены
+только для исследования стоимости. Production-like fixed-shards API использует
+полную оптимизированную финальную экспоненту: короткий MNT4-style residue-путь
+нельзя автоматически переносить на MNT6 без отдельного доказательства.
 
 Build artifacts (`out`, `cache`, `target`) не входят в поставку. Скрипты пересобирают проект заново.

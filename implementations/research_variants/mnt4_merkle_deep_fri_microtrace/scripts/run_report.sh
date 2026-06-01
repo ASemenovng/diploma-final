@@ -54,7 +54,7 @@ import pathlib
 import sys
 
 root = pathlib.Path(sys.argv[1])
-baseline_execution = 93_705_233
+baseline_execution = 93_734_789
 print(f"{'Profile':<20} {'Proof bytes':>12} {'Calldata gas':>14} {'Proving ms':>12} {'Peak RSS MiB':>14}")
 for profile in ("benchmark-32q", "conservative-128q"):
     metrics = json.loads((root / profile / "metrics.json").read_text())

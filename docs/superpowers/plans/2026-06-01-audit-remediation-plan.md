@@ -4,7 +4,7 @@
 
 **Goal:** Закрыть подтвержденные ошибки аудита: валидацию G1, MNT6 fixed-shards parity, счетчики MNT-cycle, полный naive Tate baseline и запуск ordinary-FRI модели из корневого runner-а.
 
-**Architecture:** Fixed-G2 кэши остаются доверенной предрегистрацией. Пользовательские G1-точки проверяются перед тяжелой арифметикой. MNT6 получает отдельный packed streaming fixed-shards verifier с двумя G2-кэшами и Article640 residue relation.
+**Architecture:** Fixed-G2 кэши остаются доверенной предрегистрацией. Пользовательские G1-точки проверяются перед тяжелой арифметикой. MNT6 получает отдельный packed streaming fixed-shards verifier с двумя G2-кэшами и полной оптимизированной FE. Короткое MNT4-style residue-отношение не переносится на MNT6 автоматически.
 
 **Tech Stack:** Solidity 0.8.33, Foundry, Yul hot paths, Rust, arkworks.
 
@@ -60,24 +60,27 @@
 - [ ] Написать positive и negative Foundry-тесты.
 - [ ] Запустить targeted test и увидеть падение компиляции из-за отсутствующего verifier-а.
 - [ ] Реализовать потоковый packed reader code-shards.
-- [ ] Реализовать общий residue accumulator двух пар.
+- [x] Проверить возможность переноса MNT4-style residue accumulator и
+      зафиксировать математическую неприменимость прямого переноса.
+- [x] Реализовать безопасный общий accumulator двух пар с полной
+      оптимизированной Frobenius/w0 финальной экспонентой.
 - [ ] Добавить G1 validation через `MNT6CurveChecks`.
 - [ ] Проверить корректный fixture и подмены.
 - [ ] Снять gas-report и runtime size.
 - [ ] Зафиксировать чекпоинт git.
 
-### Task 5: Реализовать полный naive Tate baseline
+### Task 5: Разделить полный reference-контур и naive Tate cost model
 
 **Files:**
 - Modify: `baselines/naive_tate_mnt4/src/MNT4TatePairingNaive.sol`
 - Modify: `baselines/naive_tate_mnt4/test/MNT4TatePairingNaive.t.sol`
-- Create: `scripts/run_naive_tate_full.sh`
+- Create: `baselines/naive_tate_mnt4/README.md`
 
-- [ ] Написать тест наличия полного API и ограниченный differential-тест.
-- [ ] Запустить тест и увидеть падение.
-- [ ] Реализовать полный scalar Miller loop и полную бинарную FE.
-- [ ] Добавить opt-in запуск с большим gas limit.
-- [ ] Зафиксировать реально достигнутую метрику или runner boundary.
+- [x] Проверить фактический объем текущего baseline.
+- [x] Явно назвать модуль cost model, а не полным исполняемым Tate-вызовом.
+- [x] Зафиксировать состав измеряемых математически корректных микроблоков.
+- [x] Сослаться на полный исполняемый reference-контур
+      `implementations/full_onchain_mnt4`.
 - [ ] Зафиксировать чекпоинт git.
 
 ### Task 6: Подключить ordinary-FRI cost model к runner-у

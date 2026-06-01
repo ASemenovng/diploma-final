@@ -22,7 +22,7 @@
 | Пункт | Статус сейчас | Что уже есть | Что нужно доделать |
 |---|---|---|---|
 | 1. Проверка оптимальности 3-limb и 2-limb арифметики | Закрыто | `docs/F1_3LIMB_ARITHMETIC_FINAL_AUDIT_RU.md`, `docs/F2_2LIMB_ARITHMETIC_FINAL_AUDIT_RU.md`, `docs/ARITHMETIC_ALGORITHM_STUDY_RU.md`, варианты CIOS/FIOS/Barrett/Comba/branchless/stack, gas-тесты | Для F8 только перенести итоговые числа и вывод о нижней границе в финальный отрицательный результат |
-| 2. Наивное Tate pairing как ориентир | Закрыто | `naive_tate_baseline/`, `naive_tate_baseline/docs/F3_NAIVE_TATE_BASELINE_RU.md`, экстраполяция полного naive пути около `2.55B gas` | Перенести как начальную строку оптимизационной лестницы в текст диплома |
+| 2. Наивное Tate pairing как ориентир | Закрыто как cost model | `baselines/naive_tate_mnt4/`, измеренные микроблоки и строгая нижняя экстраполяция naive пути около `2.55B gas` | Перенести как начальную строку оптимизационной лестницы и не называть полным исполняемым вызовом |
 | 3. Поэтапное добавление оптимизаций полного on-chain вычисления | Закрыто | `docs/MNT4_ONCHAIN_OPTIMIZATION_LADDER_RU.md`, `onchain_full/test/MNT4OptimizationLadder.t.sol`, fixed-Q, prepared sparse, code-shards, Frobenius/w0, fused hot path | Использовать таблицу ladder в F8/F9 |
 | 4. ePrint 2024/640: residue FE и polynomial check | Закрыто для MNT4 | `article640_mnt4_verifier`, direct residue verifier, code-shards, `ARTICLE640_POLYNOMIAL_CHECK_TRADEOFF_RU.md`, KZG/Merkle-FRI verifier/оценки | В F8 собрать общий вывод: residue снижает FE, но Miller loop остается дорогим; PCS переносит стоимость в constraints/calldata |
 | 5. Два оптимальных направления сравнения: gas-heavy и PCS/constraints-heavy | Закрыто как исследовательское сравнение | MNT4 gas-heavy реализован; polynomial-check + KZG/Merkle-FRI trade-off оформлен; BN254 Groth16 full proof не включается в финальный обязательный контур | В F8 явно отделить реализованный gas-heavy путь от PCS-heavy анализа |
@@ -352,7 +352,8 @@ cargo run --release --bin mnt_cycle_constraints_bench
 
 1. Зафиксирована теоретическая часть MNT6-ветки: поле `Fq(MNT6-753)=Fr(MNT4-753)`, башня `Fq -> Fq3 -> Fq6`, отличие от MNT4-башни `Fq -> Fq2 -> Fq4`.
 2. Реализован и измерен packed/pointer слой для `Fq3/Fq6`, чтобы MNT6 сравнивался с MNT4 не в заведомо проигрышной struct-архитектуре.
-3. Реализованы prepared line cache, полный Miller loop, packed Frobenius/w0 final exponentiation и article640-style residue path.
+3. Реализованы prepared line cache, полный Miller loop, packed Frobenius/w0
+   final exponentiation и исследовательский residue-фрагмент.
 4. Проведен перенос и проверка ключевых оптимизаций MNT4 -> MNT6: scratch arena, fused hot path `f <- f^2 * line(P)`, pointer-swap, packed NAF-возведение в `w0`-части.
 5. Получен отрицательно-положительный вывод: MNT6 корректно реализован, но из-за `Fq3/Fq6` и плотных line coefficients остается дороже MNT4.
 
@@ -363,13 +364,16 @@ cargo run --release --bin mnt_cycle_constraints_bench
 | Miller loop, packed pointer blob | `93,254,054` |
 | Final exponentiation, packed Frobenius/w0 + NAF | `38,428,108` |
 | Полное MNT6-сопряжение: Miller + packed FE | `131,685,843` |
-| Article640-style residue path | `103,294,551` |
+| Исследовательский residue digest | `103,294,551` |
+| Fixed-shards bool equation verifier с полной оптимизированной FE | `226,073,973` |
 
 **Критерий готовности:**
 
 - Реализована MNT6-753 арифметика `Fq/Fq3/Fq6` в Solidity/Yul.
 - Реализован MNT6 prepared sparse Miller path.
-- Реализован MNT6 article640 residue verifier.
+- Реализован MNT6 fixed-shards bool equation verifier. Для production-like
+  проверки используется полная оптимизированная FE: короткое MNT4-style
+  `c`-свидетельство нельзя переносить на MNT6 без отдельного доказательства.
 - Есть Rust backend для генерации fixtures и cross-check против `ark-mnt6-753`.
 - Есть gas report и итоговая таблица по режимам MNT6.
 

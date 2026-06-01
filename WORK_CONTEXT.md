@@ -139,7 +139,9 @@ Added `docs/ALGORITHM_COMPLEXITY_ESTIMATES_RU.md` to close the supervisor's thir
 
 Свежий function gas:
 - `verifyEquationFixedQParametricSResidueCodeShards`, старый API с shard-адресами как input: `93,685,247 gas`;
-- `verifyEquationResidueFixedShards`, новый API с fixed shard-адресами: `93,705,233 gas`;
+- `verifyEquationResidueFixedShards`, новый API с fixed shard-адресами:
+  первоначально `93,705,233 gas`, после добавления проверки G1 -
+  `93,734,789 function gas`;
 - overhead около `19,986 gas`, в основном из-за чтения shard-адресов из storage; координаты `S` перенесены в `immutable`, чтобы убрать лишние storage reads.
 
 Проверка: `cd article640_mnt4_verifier && forge test -vv` -> `64 tests passed, 0 failed`.
@@ -501,7 +503,8 @@ cd /Users/a.i.semenov/diploma-final
 
 Полный прогон завершен с кодом `0`. Ключевые runtime gas-метрики совпадают с логом до рефакторинга:
 
-- Article640 MNT4 fixed-shards residue: `93,705,233 gas`;
+- Article640 MNT4 fixed-shards residue: первоначально `93,705,233 gas`,
+  после добавления проверки G1 - `93,734,789 function gas`;
 - Article640 MNT4 calldata+commitment residue: `93,974,409 gas`;
 - MNT6 packed residue: `103,294,551 gas`;
 - lollipop-305 Ehat ate residue max: `106,457,927 gas`;
@@ -690,7 +693,8 @@ cd /Users/a.i.semenov/diploma-final
   финальный многочлен, листья и корни Merkle-деревьев, DEEP-инверсии и
   frontier-хеши.
 - Fresh gas-сравнение метода контракта:
-  Article640 fixed-shards residue baseline `93705233 gas`;
+  Article640 fixed-shards residue baseline после проверки G1
+  `93734789 function gas`;
   Merkle/DEEP-FRI `benchmark-32q` `83962252 gas`;
   Merkle/DEEP-FRI `conservative-128q` `640161168 gas`.
   После добавления верхней оценки calldata benchmark-профиль дает
@@ -1019,3 +1023,25 @@ cd /Users/a.i.semenov/diploma-final
   4. довести MNT6 до интегрированного fixed-shards bool pairing-equation
      verifier-а;
   5. синхронизировать документацию и автоматизировать fixture cross-check.
+
+## 2026-06-01: исправления по результатам полного аудита
+
+- Исправлена ручная MNT-cycle модель: MNT4 использует `376/124`, MNT6 -
+  `376/123` шагов удвоения/сложения. Итоги: `24,126` и `48,942`
+  multiplication constraints.
+- Добавлен `MNT4CurveChecks`; production и direct Article640 API MNT4
+  отклоняют неканонические точки и точки вне G1 до тяжелой арифметики.
+- Rust backend MNT6 теперь строит ненулевое билинейное уравнение
+  `e(2G1,G2)=e(G1,2G2)` и два prepared cache.
+- Добавлен `MNT6Article640FixedShardsVerifier`: фиксирует shard-адреса,
+  потоково читает коэффициенты через `EXTCODECOPY`, проверяет G1-точки и
+  возвращает `bool` для полного уравнения сопряжений. Gas:
+  `226,073,973` для `verifyEquationFullFixedShards`.
+- Прямой перенос MNT4-style короткого `c`-свидетельства на MNT6 признан
+  некорректным: production-like MNT6 fixed-shards путь использует полную
+  оптимизированную Frobenius/w0 финальную экспоненту.
+- Корневой `scripts/run_all.sh` запускает актуальную ordinary-FRI cost model.
+- `baselines/naive_tate_mnt4` явно оформлен как cost model: измеренные
+  математически корректные микроблоки плюс строгая нижняя экстраполяция.
+  Полный исполняемый reference MNT4 остается в
+  `implementations/full_onchain_mnt4`.

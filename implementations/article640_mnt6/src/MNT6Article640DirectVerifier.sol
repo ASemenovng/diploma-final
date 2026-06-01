@@ -5,9 +5,10 @@ import {MNT6PairingTypes} from "@arith-mnt6/MNT6PairingTypes.sol";
 import {MNT6Fq6} from "@arith-mnt6/MNT6Fq6.sol";
 import {MNT6AteLoop} from "@arith-mnt6/MNT6AteLoop.sol";
 
-/// @notice Проверяет MNT6-753 уравнение сопряжений в режимах полной и сокращенной финальной экспоненты.
-/// @dev Для уравнения ate-сопряжений произведение Миллера F должно удовлетворять FinalExp(F)=1.
-///      Сокращенная проверка использует c-свидетельство: F=c^r и c*c^{-1}=1.
+/// @notice Диагностический контракт для измерения отдельных MNT6-753 путей Миллера и финальной экспоненты.
+/// @dev Этот контракт не является публичным production-verifier-ом: его функции принимают подготовленные
+///      данные непосредственно от вызывающей стороны и нужны для кросс-проверок и gas-бенчмарков.
+///      Безопасный fixed-shards API находится в `MNT6Article640FixedShardsVerifier`.
 contract MNT6Article640DirectVerifier {
     /// @notice Выполняет цикл Миллера по подготовленному blob коэффициентов линий.
     function millerLoopPreparedBlob(
@@ -72,7 +73,9 @@ contract MNT6Article640DirectVerifier {
         return hashFq6(MNT6Fq6.finalExponentiationPacked(f));
     }
 
-    /// @notice Выполняет packed-цикл Миллера и сокращенную проверку с c-свидетельством.
+    /// @notice Выполняет исследовательский packed residue-фрагмент с c-свидетельством.
+    /// @dev Результат нужен только для измерения. MNT4-style короткое c-отношение нельзя
+    ///      автоматически переносить в production MNT6 verifier без отдельного доказательства.
     function pairingPreparedPackedResidueDigest(
         MNT6PairingTypes.G1Point calldata p,
         MNT6PairingTypes.Fq3 calldata qXOverTwist,
@@ -130,7 +133,8 @@ contract MNT6Article640DirectVerifier {
         return hashFq6(f);
     }
 
-    /// @notice Изолированно проверяет отношение F=c^r и корректность переданного cInv.
+    /// @notice Изолированно проверяет исследовательское отношение F=c^r и корректность cInv.
+    /// @dev Диагностическая функция не является заменой полной MNT6 pairing-equation проверки.
     function verifyResidueRelation(
         MNT6PairingTypes.Fq6 calldata millerProduct,
         MNT6PairingTypes.Fq6 calldata c,

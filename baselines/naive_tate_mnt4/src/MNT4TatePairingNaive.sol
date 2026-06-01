@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.33;
 
-/// @notice Намеренно наивная Solidity-реализация для оценки исходной стоимости Tate-сопряжения MNT4-753.
+/// @notice Намеренно наивная модель стоимости Tate-сопряжения MNT4-753.
 /// @dev В контракте нет Yul-оптимизаций, подготовленного fixed-Q кэша, разреженных умножений
 ///      на линии и ускорения финальной экспоненты через Frobenius и фиксированные цепочки.
-///      Сохранен только минимум многословной арифметики, необходимый для математической корректности.
+///      Контракт измеряет математически корректные микроблоки общего Tate-алгоритма:
+///      школьную арифметику Fq/Fq2/Fq4, общий шаг Миллера и фрагмент бинарного
+///      возведения в степень. Полный наивный вызов не исполняется: его стоимость
+///      вычисляется строгой экстраполяцией измеренных микроблоков. Полный
+///      исполняемый reference-контур находится в implementations/full_onchain_mnt4.
 contract MNT4TatePairingNaive {
     /// @dev Константа `P0` задает слово модуля поля или связанный параметр редукции.
     uint256 private constant P0 = 0x685acce9767254a4638810719ac425f0e39d54522cdd119f5e9063de245e8001;
@@ -104,8 +108,9 @@ contract MNT4TatePairingNaive {
         return keccak256(abi.encode(f));
     }
 
-    /// @notice Naive binary exponentiation fragment over 16 bits.
-    /// @dev The full final exponent is intentionally not executed here; it is extrapolated from this generic fragment.
+    /// @notice Исполняет 16-битный фрагмент обычного бинарного возведения в степень.
+    /// @dev Полная финальная экспонента намеренно не исполняется: ее стоимость
+    ///      экстраполируется из этого общего фрагмента без Frobenius-оптимизаций.
     function benchNaiveFinalExponentiationChunk16() external pure returns (bytes32 digest) {
         uint256[12] memory x = _fq4FromUint(2, 3, 5, 7);
         uint256[12] memory acc = _fq4One();

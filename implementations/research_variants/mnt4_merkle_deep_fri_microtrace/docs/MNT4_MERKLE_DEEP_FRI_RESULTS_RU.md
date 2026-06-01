@@ -88,14 +88,14 @@ MNT4Article640FixedShardsVerifier.verifyEquationResidueFixedShards
 
 | Реализация | Execution gas |
 |---|---:|
-| Article640 fixed-shards residue baseline | 93 705 233 |
+| Article640 fixed-shards residue baseline с проверкой G1 | 93 734 789 |
 | Merkle/DEEP-FRI `benchmark-32q` | 83 962 252 |
 | Merkle/DEEP-FRI `conservative-128q` | 640 161 168 |
 
 Профиль `benchmark-32q` снижает execution gas на
 
 ```text
-93 705 233 - 83 962 252 = 9 742 981 gas
+93 734 789 - 83 962 252 = 9 772 537 gas
 ```
 
 или примерно на `10,4%`.
@@ -106,7 +106,7 @@ MNT4Article640FixedShardsVerifier.verifyEquationResidueFixedShards
 
 | Реализация | Execution gas | Верхняя оценка calldata gas | Сумма |
 |---|---:|---:|---:|
-| Article640 fixed-shards residue baseline | 93 705 233 | малая фиксированная часть | около 93,7 млн |
+| Article640 fixed-shards residue baseline с проверкой G1 | 93 734 789 | малая фиксированная часть | около 93,7 млн |
 | Merkle/DEEP-FRI `benchmark-32q` | 83 962 252 | 4 236 224 | 88 198 476 |
 | Merkle/DEEP-FRI `conservative-128q` | 640 161 168 | 15 273 920 | 655 435 088 |
 
