@@ -12,3 +12,14 @@
 Не используйте старый шаблон `/Users/a.i.semenov/Downloads/main.tex`: он
 относится к предыдущему документу и содержит ссылку на отсутствующий рисунок
 `example-image`.
+
+Преамбула `main.tex` рассчитана именно на стандартный `pdfLaTeX`:
+
+```tex
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+```
+
+Пакет `fontspec` не используется. Переключать компилятор на XeLaTeX или
+LuaLaTeX не требуется.
