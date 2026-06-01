@@ -2,6 +2,7 @@
 pragma solidity 0.8.33;
 
 import {BigIntMNT} from "@arith-mnt4/BigIntMNT.sol";
+import {MNT4CurveChecks} from "@arith-mnt4/MNT4CurveChecks.sol";
 import {MNT4ExtensionFinal} from "@arith-mnt4/MNT4Extension.sol";
 import {MNT4TatePairing} from "./MNT4TatePairing.sol";
 
@@ -105,6 +106,7 @@ contract MNT4Article640HotCommitmentVerifier {
         bytes memory dblSparseS,
         bytes memory addSparseS
     ) external view returns (bool) {
+        if (!MNT4CurveChecks.isOnG1(p.x, p.y) || !MNT4CurveChecks.isOnG1(r.x, r.y)) return false;
         if (hashSparseCacheForFixedQ(dblSparseQ, addSparseQ) != COMMITMENT_Q) return false;
         MNT4TatePairing.G2Affine memory s = fixedS;
         if (hashSparseCacheForPoint(s, dblSparseS, addSparseS) != COMMITMENT_S) return false;
@@ -128,6 +130,7 @@ contract MNT4Article640HotCommitmentVerifier {
         address[] memory dblShardsS,
         address[] memory addShardsS
     ) external view returns (bool) {
+        if (!MNT4CurveChecks.isOnG1(p.x, p.y) || !MNT4CurveChecks.isOnG1(r.x, r.y)) return false;
         bytes memory dblSparseQ = _readCodeShards(dblShardsQ, FIXED_DBL_SPARSE_BYTES);
         bytes memory addSparseQ = _readCodeShards(addShardsQ, FIXED_ADD_SPARSE_BYTES);
         if (hashSparseCacheForFixedQ(dblSparseQ, addSparseQ) != COMMITMENT_Q) return false;

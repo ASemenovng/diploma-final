@@ -2,6 +2,7 @@
 pragma solidity 0.8.33;
 
 import {BigIntMNT} from "@arith-mnt4/BigIntMNT.sol";
+import {MNT4CurveChecks} from "@arith-mnt4/MNT4CurveChecks.sol";
 import {MNT4ExtensionFinal} from "@arith-mnt4/MNT4Extension.sol";
 import {MNT4TatePairing} from "./MNT4TatePairing.sol";
 
@@ -86,6 +87,7 @@ contract MNT4Article640FixedShardsVerifier {
         MNT4ExtensionFinal.Fq4 memory c,
         MNT4ExtensionFinal.Fq4 memory cInv
     ) external view returns (bool) {
+        if (!MNT4CurveChecks.isOnG1(p.x, p.y) || !MNT4CurveChecks.isOnG1(r.x, r.y)) return false;
         if (!_isOne(MNT4ExtensionFinal.fq4Mul(c, cInv))) return false;
 
         address[] memory dblQ = dblShardsQ;

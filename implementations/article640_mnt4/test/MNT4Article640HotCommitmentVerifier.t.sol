@@ -104,6 +104,24 @@ contract MNT4Article640HotCommitmentVerifierTest is Test {
         assertFalse(fixedShards.verifyEquationResidueFixedShards(p, r, c, cInv));
     }
 
+    function testFixedShardsRejectsPointOutsideG1() public view {
+        (MNT4ExtensionFinal.Fq4 memory c, MNT4ExtensionFinal.Fq4 memory cInv) = _hotResidueWitness();
+        MNT4TatePairing.G1Affine memory badP = p;
+        badP.x[0] ^= 1;
+        assertFalse(fixedShards.verifyEquationResidueFixedShards(badP, r, c, cInv));
+    }
+
+    function testCommittedRejectsPointOutsideG1() public view {
+        (MNT4ExtensionFinal.Fq4 memory c, MNT4ExtensionFinal.Fq4 memory cInv) = _hotResidueWitness();
+        MNT4TatePairing.G1Affine memory badR = r;
+        badR.y[0] ^= 1;
+        assertFalse(
+            committed.verifyEquationResidueCommitted(
+                p, badR, c, cInv, dblSparseQ, addSparseQ, dblSparseS, addSparseS
+            )
+        );
+    }
+
     function testCommittedCalldataMatchesHotResult() public view {
         (MNT4ExtensionFinal.Fq4 memory c, MNT4ExtensionFinal.Fq4 memory cInv) = _hotResidueWitness();
         bool hotOk = hot.verifyEquationFixedQParametricSResidue(p, r, s, c, cInv, dblSparseQ, addSparseQ, dblSparseS, addSparseS);
