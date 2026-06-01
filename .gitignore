@@ -4,6 +4,7 @@ cache/
 target/
 broadcast/
 node_modules/
+.worktrees/
 
 # Local/generated reports
 .reports/
