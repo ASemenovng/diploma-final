@@ -1212,3 +1212,17 @@ cd /Users/a.i.semenov/diploma-final
 - Копии сохранены в Downloads:
   `/Users/a.i.semenov/Downloads/итоговый отчет (2) сокращенный с таблицей.tex`
   и `/Users/a.i.semenov/Downloads/итоговый отчет (2) сокращенный с таблицей.pdf`.
+
+## 2026-06-01: независимое задание Claude для 3-limb умножения
+
+- Добавлен документ
+  `docs/CLAUDE_INDEPENDENT_3LIMB_MONTGOMERY_MUL_TASK_RU.md`.
+- Цель документа: дать Claude независимое задание реализовать с нуля
+  3-limb Montgomery-умножение поля MNT4-753 и попытаться достичь
+  `<= 1,500 gas/op` для внутреннего библиотечного вызова.
+- В документ намеренно не включены текущий production-код, примененные в нем
+  оптимизации, результаты существующих вариантов и подсказки по выбору
+  алгоритма. Зафиксированы только математическая семантика, API, модуль поля,
+  конфигурация Foundry, требования к тестам и методика benchmark-а.
+- Копия для передачи Claude сохранена в Downloads:
+  `/Users/a.i.semenov/Downloads/CLAUDE_INDEPENDENT_3LIMB_MONTGOMERY_MUL_TASK_RU.md`.
