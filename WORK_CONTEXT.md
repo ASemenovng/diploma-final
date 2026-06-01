@@ -997,3 +997,25 @@ cd /Users/a.i.semenov/diploma-final
 - Архивный `scripts/run_report.sh` пересобирает fixtures во временном каталоге
   `.reports/`, сравнивает детерминированные файлы с tracked-эталонами и не
   изменяет git-дерево из-за нестабильных `provingMs` и peak RSS.
+
+## 2026-06-01: полный аудит практической части
+
+- Расширен план проверки:
+  `docs/PRACTICAL_IMPLEMENTATION_FULL_AUDIT_PLAN_RU.md`.
+- Подготовлены итоговый отчет и матрица трассируемости:
+  `docs/PRACTICAL_IMPLEMENTATION_FULL_AUDIT_REPORT_RU.md`,
+  `docs/PRACTICAL_IMPLEMENTATION_AUDIT_TRACEABILITY_MATRIX_RU.md`.
+- Канонический `scripts/run_all.sh` завершился успешно. Дополнительно пройдены
+  расширенные Foundry-тесты, Rust fixture cross-check, Merkle/FRI cost model,
+  архивный DEEP-FRI report, bash syntax и проверка tracked generated-файлов.
+- Главный вердикт: проект готов как исследовательская практическая часть с
+  отрицательным/граничным результатом, но не как универсальная
+  production-замена MNT precompile.
+- Обязательные исправления перед финальной фиксацией:
+  1. исправить MNT-cycle счетчики и назвать результат ручной моделью;
+  2. явно документировать доверенную предрегистрацию MNT4 fixed-shards cache;
+  3. добавить input validation для public verifier API либо строгую внешнюю
+     предпосылку;
+  4. довести MNT6 до интегрированного fixed-shards bool pairing-equation
+     verifier-а;
+  5. синхронизировать документацию и автоматизировать fixture cross-check.
