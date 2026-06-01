@@ -2,6 +2,7 @@
 pragma solidity 0.8.33;
 
 import {BigIntMNT} from "@arith-mnt4/BigIntMNT.sol";
+import {MNT4CurveChecks} from "@arith-mnt4/MNT4CurveChecks.sol";
 import {MNT4ExtensionFinal} from "@arith-mnt4/MNT4Extension.sol";
 import {MNT4TatePairing} from "./MNT4TatePairing.sol";
 
@@ -41,6 +42,7 @@ contract MNT4Article640SameQHotVerifier {
         bytes memory dblSparseS,
         bytes memory addSparseS
     ) external pure returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         return MNT4TatePairing.pairingEquationFixedQParametricSPreparedSparseMemIsOne(
             p, _negG1(r), s, dblSparseQ, addSparseQ, dblSparseS, addSparseS
         );
@@ -56,6 +58,7 @@ contract MNT4Article640SameQHotVerifier {
         bytes memory dblSparseS,
         bytes memory addSparseS
     ) external pure returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         bytes32 digest = MNT4TatePairing.millerLoopFixedQParametricSPreparedSparseMemDigest(
             p, _negG1(r), s, dblSparseQ, addSparseQ, dblSparseS, addSparseS
         );
@@ -74,6 +77,7 @@ contract MNT4Article640SameQHotVerifier {
         bytes memory dblSparseS,
         bytes memory addSparseS
     ) external pure returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         if (!_isOne(MNT4ExtensionFinal.fq4Mul(c, cInv))) return false;
         return MNT4TatePairing.pairingEquationFixedQParametricSPreparedSparseMemResidueIsOne(
             p, _negG1(r), s, c, cInv, dblSparseQ, addSparseQ, dblSparseS, addSparseS
@@ -92,6 +96,7 @@ contract MNT4Article640SameQHotVerifier {
         address[] memory dblShardsS,
         address[] memory addShardsS
     ) external view returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         if (!_isOne(MNT4ExtensionFinal.fq4Mul(c, cInv))) return false;
         return MNT4TatePairing.pairingEquationFixedQParametricSPreparedSparseCodeShardsResidueIsOne(
             p, _negG1(r), s, c, cInv, dblShardsQ, addShardsQ, dblShardsS, addShardsS
@@ -129,6 +134,7 @@ contract MNT4Article640SameQHotVerifier {
         bytes memory dblSparse,
         bytes memory addSparse
     ) external pure returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         MNT4TatePairing.G1Affine[] memory points = _equationPoints(p, r);
         MNT4ExtensionFinal.Fq4 memory out =
             MNT4TatePairing.tateMultiPairingFixedQPreparedSparseMem(points, dblSparse, addSparse);
@@ -142,6 +148,7 @@ contract MNT4Article640SameQHotVerifier {
         bytes memory dblSparse,
         bytes memory addSparse
     ) external pure returns (bool) {
+        if (!_validG1(p) || !_validG1(r)) return false;
         MNT4TatePairing.G1Affine[] memory points = _equationPoints(p, r);
         MNT4TatePairing.multiMillerLoopFixedQPreparedSparseBlobNoInvMem(points, dblSparse, addSparse);
         return true;
@@ -162,6 +169,11 @@ contract MNT4Article640SameQHotVerifier {
     /// @notice Вычисляет -a mod p для элемента Fq.
     function _negFp(uint256[3] memory a) private pure returns (uint256[3] memory out) {
         (out[0], out[1], out[2]) = BigIntMNT.sub3(0, 0, 0, a[0], a[1], a[2]);
+    }
+
+    /// @notice Проверяет каноничность координат и уравнение кривой для публичной точки G1.
+    function _validG1(MNT4TatePairing.G1Affine memory p) private pure returns (bool) {
+        return MNT4CurveChecks.isOnG1(p.x, p.y);
     }
 
     /// @notice Возвращает -P в G1.
