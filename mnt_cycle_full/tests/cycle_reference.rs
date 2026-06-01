@@ -45,3 +45,14 @@ fn mnt6_relation_uses_cubic_and_sextic_tower_costs() {
     assert_eq!(report.mnt6.fq6_mul_constraints, Some(18));
     assert!(report.mnt6.one_miller_transition_constraints > report.mnt4.one_miller_transition_constraints);
 }
+
+#[test]
+fn relation_accounting_uses_executable_ate_loop_counts() {
+    let report = build_cycle_report();
+    assert_eq!(report.mnt4.miller_rounds, 376);
+    assert_eq!(report.mnt4.addition_steps, 124);
+    assert_eq!(report.mnt4.prepared_relation_constraints, 24_126);
+    assert_eq!(report.mnt6.miller_rounds, 376);
+    assert_eq!(report.mnt6.addition_steps, 123);
+    assert_eq!(report.mnt6.prepared_relation_constraints, 48_942);
+}

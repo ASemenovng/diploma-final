@@ -13,17 +13,17 @@ use ark_serialize::CanonicalSerialize;
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
-pub const MNT4_MILLER_ROUNDS: u64 = 377;
+pub const MNT4_MILLER_ROUNDS: u64 = 376;
 pub const MNT4_ADDITION_STEPS: u64 = 124;
 
 // The MNT6 side is used here as a preliminary operation model for the opposite
 // side of the cycle. The constants are derived from the arkworks ate-loop shape:
 // one doubling transition for each processed non-leading loop digit, and an addition
-// transition for every non-zero digit except the leading digit. Arkworks has 378
-// loop digits and 125 non-zero digits for both MNT4-753 and MNT6-753, hence
-// 377 doubling rounds and 124 addition steps.
-pub const MNT6_MILLER_ROUNDS: u64 = 377;
-pub const MNT6_ADDITION_STEPS: u64 = 124;
+// transition for every non-zero processed digit. The executable Solidity paths
+// use 376 doubling transitions. MNT4 has 124 addition transitions, while MNT6
+// has 123 addition transitions.
+pub const MNT6_MILLER_ROUNDS: u64 = 376;
+pub const MNT6_ADDITION_STEPS: u64 = 123;
 
 pub const BN254_NON_NATIVE_SPARSE_MILLER_CONSTRAINTS: u64 = 63_309_128;
 pub const SONOBE_LIKE_DECIDER_REFERENCE_CONSTRAINTS: u64 = 9_000_000;
