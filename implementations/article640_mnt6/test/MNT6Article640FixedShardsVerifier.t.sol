@@ -42,10 +42,64 @@ contract MNT6Article640FixedShardsVerifierTest is Test {
         assertTrue(verifier.verifyEquationFullFixedShards(p, r));
     }
 
+    function testResidueVerifierAcceptsArkworksBilinearEquation() public view {
+        string memory json = vm.readFile("fixtures/mnt6_fixture.json");
+        assertTrue(
+            verifier.verifyEquationResidueFixedShards(
+                p,
+                r,
+                _readFq6(json, ".equation.residue_c"),
+                _readFq6(json, ".equation.residue_c_inv")
+            )
+        );
+    }
+
+    function testResidueVerifierRejectsCorruptedWitness() public view {
+        string memory json = vm.readFile("fixtures/mnt6_fixture.json");
+        MNT6PairingTypes.Fq6 memory badC = _readFq6(json, ".equation.residue_c");
+        badC.c0.c0.d0 ^= 1;
+        assertFalse(
+            verifier.verifyEquationResidueFixedShards(
+                p,
+                r,
+                badC,
+                _readFq6(json, ".equation.residue_c_inv")
+            )
+        );
+    }
+
+    function testResidueVerifierRejectsFalseEquationWithValidPoints() public view {
+        string memory json = vm.readFile("fixtures/mnt6_fixture.json");
+        assertFalse(
+            verifier.verifyEquationResidueFixedShards(
+                p,
+                p,
+                _readFq6(json, ".equation.residue_c"),
+                _readFq6(json, ".equation.residue_c_inv")
+            )
+        );
+    }
+
     function testRejectsPointOutsideG1BeforeMillerLoop() public view {
         MNT6PairingTypes.G1Point memory badP = p;
         badP.x.d0 ^= 1;
         assertFalse(verifier.verifyEquationFullFixedShards(badP, r));
+    }
+
+    /// @notice Новый residue API обязан отклонять точку вне G1 до запуска
+    ///         дорогостоящего multi-Miller цикла.
+    function testResidueVerifierRejectsPointOutsideG1BeforeMillerLoop() public view {
+        string memory json = vm.readFile("fixtures/mnt6_fixture.json");
+        MNT6PairingTypes.G1Point memory badP = p;
+        badP.x.d0 ^= 1;
+        assertFalse(
+            verifier.verifyEquationResidueFixedShards(
+                badP,
+                r,
+                _readFq6(json, ".equation.residue_c"),
+                _readFq6(json, ".equation.residue_c_inv")
+            )
+        );
     }
 
     function _deployCodeShards(bytes memory blob) private returns (address[] memory shards) {
@@ -89,6 +143,15 @@ contract MNT6Article640FixedShardsVerifierTest is Test {
         out.c0 = _readFp(json, string.concat(path, ".c0"));
         out.c1 = _readFp(json, string.concat(path, ".c1"));
         out.c2 = _readFp(json, string.concat(path, ".c2"));
+    }
+
+    function _readFq6(string memory json, string memory path)
+        private
+        pure
+        returns (MNT6PairingTypes.Fq6 memory out)
+    {
+        out.c0 = _readFq3(json, string.concat(path, ".c0"));
+        out.c1 = _readFq3(json, string.concat(path, ".c1"));
     }
 
     function _readFp(string memory json, string memory path)

@@ -1,6 +1,6 @@
 use ark_ec::{models::short_weierstrass::SWCurveConfig, pairing::Pairing, CurveGroup, PrimeGroup};
 use ark_ff::{AdditiveGroup, BigInteger, Field, PrimeField};
-use ark_mnt6_753::{g1, g2, Fq, Fq3, Fq6, G1Prepared, G1Projective, G2Prepared, G2Projective, MNT6_753};
+use ark_mnt6_753::{g1, g2, Fq, Fq3, Fq6, Fr, G1Prepared, G1Projective, G2Prepared, G2Projective, MNT6_753};
 use ark_serialize::CanonicalSerialize;
 use serde::{Deserialize, Serialize};
 
@@ -89,6 +89,9 @@ pub struct EquationJson {
     pub s_dbl_blob: String,
     pub s_add_blob: String,
     pub miller_product: Fq6Json,
+    pub residue_c: Fq6Json,
+    pub residue_c_inv: Fq6Json,
+    pub residue_relation_holds: bool,
     pub final_exp_is_one: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +144,9 @@ pub fn build_fixture() -> FixtureJson {
     let equation_miller = MNT6_753::multi_miller_loop([equation_p, -equation_r], [equation_q, equation_s]).0;
     let equation_final =
         MNT6_753::final_exponentiation(ark_ec::pairing::MillerLoopOutput::<MNT6_753>(equation_miller)).unwrap().0;
+    let equation_residue_c = residue_witness_for_equation_output(equation_miller);
+    let equation_residue_c_inv = equation_residue_c.inverse().unwrap();
+    let equation_residue_relation_holds = equation_residue_c.pow(Fr::MODULUS) == equation_miller;
 
     FixtureJson {
         constants: ConstantsJson {
@@ -212,9 +218,25 @@ pub fn build_fixture() -> FixtureJson {
             s_dbl_blob: pack_doubles(&equation_s_prep.double_coefficients),
             s_add_blob: pack_adds(&equation_s_prep.addition_coefficients),
             miller_product: fq6_json(&equation_miller),
+            residue_c: fq6_json(&equation_residue_c),
+            residue_c_inv: fq6_json(&equation_residue_c_inv),
+            residue_relation_holds: equation_residue_relation_holds,
             final_exp_is_one: equation_final == Fq6::ONE,
         },
     }
+}
+
+/// Computes c such that c^r equals the Miller product of a valid pairing equation.
+///
+/// For MNT6-753, h=(q^6-1)/r and gcd(r,h)=1. Therefore r has an inverse
+/// modulo h. A valid equation product belongs to the subgroup of order h, so
+/// raising it to r^{-1} mod h extracts the required r-th root.
+fn residue_witness_for_equation_output(miller_product: Fq6) -> Fq6 {
+    let q = modulus_biguint::<Fq>();
+    let r = modulus_biguint::<Fr>();
+    let h = ((q.pow(6)) - 1u32) / &r;
+    let r_inv_mod_h = modinv(&r, &h);
+    miller_product.pow(r_inv_mod_h.to_u64_digits())
 }
 
 fn fp_json(x: &Fq) -> FpJson {
@@ -270,6 +292,7 @@ mod tests {
     fn article640_equation_fixture_is_nontrivial_and_satisfies_relation() {
         let fixture = build_fixture();
         assert!(fixture.equation.final_exp_is_one);
+        assert!(fixture.equation.residue_relation_holds);
         assert_ne!(fixture.equation.p.x.d0, fixture.equation.r.x.d0);
         assert_ne!(fixture.equation.q.x.c0.d0, fixture.equation.s.x.c0.d0);
     }

@@ -74,8 +74,8 @@ contract MNT6Article640DirectVerifier {
     }
 
     /// @notice Выполняет исследовательский packed residue-фрагмент с c-свидетельством.
-    /// @dev Результат нужен только для измерения. MNT4-style короткое c-отношение нельзя
-    ///      автоматически переносить в production MNT6 verifier без отдельного доказательства.
+    /// @dev Результат нужен только для измерения одного Miller loop. Production-путь для
+    ///      уравнения двух сопряжений находится в `MNT6Article640FixedShardsVerifier`.
     function pairingPreparedPackedResidueDigest(
         MNT6PairingTypes.G1Point calldata p,
         MNT6PairingTypes.Fq3 calldata qXOverTwist,

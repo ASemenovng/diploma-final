@@ -248,7 +248,8 @@ mnt6_article640_verifier/
 | Miller loop, packed pointer blob | `93,254,054` |
 | Final exponentiation, packed Frobenius/w0 + NAF | `38,428,108` |
 | Полное MNT6-сопряжение | `131,685,843` |
-| Article640-style residue path | `103,294,551` |
+| Article640-style residue digest одного сопряжения | `103,277,505` |
+| Fixed-shards bool residue equation с общим аккумулятором | `172,004,717` |
 
 MNT6 корректно реализован, но не стал дешевле MNT4. Причина: башня `Fq -> Fq3 -> Fq6` дороже, а prepared line coefficients плотнее.
 
@@ -301,7 +302,7 @@ c^p * F_den = F_num.
 | BN254 non-native sparse Miller | R1CS модель | `63.3M constraints` | повторяет проблему Sonobe/CycleFold |
 | Merkle/FRI opening layer | Merkle openings | `459KB+ calldata` в умеренной модели | перенос стоимости в calldata |
 | MNT-cycle-native relation | Rust/accounting | `24k-49k relation ops` | перспективно для будущего folding |
-| MNT6 article640 | полный MNT6 verifier | `103.3M gas` residue | корректно, но дороже MNT4 |
+| MNT6 article640 | fixed-shards bool residue equation | `172.0M gas` | общий аккумулятор дешевле полной FE, но `Fq3/Fq6` дороже MNT4 |
 | lollipop-305 | полный research-cycle | `133.5M gas` | арифметика дешевле, pairing-структура дороже |
 
 ## 5. Экономическая интерпретация gas
@@ -326,7 +327,7 @@ ETH_price_usd = 3000.
 | MNT4 full optimized on-chain | `258,753,182` | `$776` | `$3,881` | `$15,525` |
 | MNT4 prepared sparse | `79,588,799` | `$239` | `$1,194` | `$4,775` |
 | MNT4 article640 residue | `93,879,746` | `$282` | `$1,408` | `$5,633` |
-| MNT6 article640 residue | `103,294,551` | `$310` | `$1,549` | `$6,198` |
+| MNT6 article640 fixed-shards residue equation | `172,004,717` | `$516` | `$2,580` | `$10,320` |
 | lollipop full research-cycle | `133,511,419` | `$401` | `$2,003` | `$8,011` |
 | KZG opening verifier | `133,039` | `$0.40` | `$2.00` | `$7.98` |
 

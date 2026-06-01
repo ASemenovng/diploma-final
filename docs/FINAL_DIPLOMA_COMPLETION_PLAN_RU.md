@@ -364,16 +364,18 @@ cargo run --release --bin mnt_cycle_constraints_bench
 | Miller loop, packed pointer blob | `93,254,054` |
 | Final exponentiation, packed Frobenius/w0 + NAF | `38,428,108` |
 | Полное MNT6-сопряжение: Miller + packed FE | `131,685,843` |
-| Исследовательский residue digest | `103,294,551` |
-| Fixed-shards bool equation verifier с полной оптимизированной FE | `226,073,973` |
+| Исследовательский residue digest одного сопряжения | `103,277,505` |
+| Fixed-shards bool equation verifier с полной оптимизированной FE | `226,078,963` |
+| Fixed-shards bool residue equation с общим аккумулятором | `172,004,717` |
 
 **Критерий готовности:**
 
 - Реализована MNT6-753 арифметика `Fq/Fq3/Fq6` в Solidity/Yul.
 - Реализован MNT6 prepared sparse Miller path.
-- Реализован MNT6 fixed-shards bool equation verifier. Для production-like
-  проверки используется полная оптимизированная FE: короткое MNT4-style
-  `c`-свидетельство нельзя переносить на MNT6 без отдельного доказательства.
+- Реализован MNT6 fixed-shards bool residue verifier с общим multi-Miller
+  аккумулятором. Для MNT6 выведено и проверено отдельное отношение:
+  `r_MNT6=q_MNT6-N`, поэтому `c^{-r}=c^{N-q}`. Полная финальная экспонента
+  оставлена рядом только как контрольный baseline.
 - Есть Rust backend для генерации fixtures и cross-check против `ark-mnt6-753`.
 - Есть gas report и итоговая таблица по режимам MNT6.
 

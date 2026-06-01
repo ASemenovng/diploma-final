@@ -129,7 +129,11 @@ F6B не добавляет новый on-chain verifier и поэтому не 
 
 Не реализован новый EVM verifier, который самостоятельно проверяет MNT-cycle-native proof.
 
-Не реализована Solidity-арифметика MNT6 по аналогии с MNT4. Для F6B MNT6 используется как reference/relation сторона через Rust и arkworks.
+В границах самого F6B Solidity-арифметика MNT6 еще не реализовывалась: MNT6
+использовалась как reference/relation сторона через Rust и arkworks. Этот
+пробел впоследствии закрыт этапом F6C: в `implementations/article640_mnt6`
+добавлены Solidity/Yul-арифметика `Fq/Fq3/Fq6`, prepared Miller loop,
+fixed-shards multi-Miller residue verifier и cross-check против arkworks.
 
 Это сознательное ограничение. Этап нужен, чтобы закрыть предварительную часть: параметры цикла, reference pairing, relation fragments и constraints accounting.
 

@@ -392,7 +392,9 @@ Gas after pointer-swap:
 - Packed Miller loop digest: 93,254,054 gas (was 93,728,293).
 - Packed FE: 38,428,108 gas (was 38,905,291).
 - Full pairing with packed FE: 131,685,843 gas (was 132,637,265).
-- Article640-style residue path: 103,294,551 gas (was 103,663,480).
+- Article640-style residue path на тот момент: 103,294,551 gas (was
+  103,663,480). После исправления знака MNT6 relation актуальная метрика
+  одиночного diagnostic digest равна `103,277,505 gas`.
 
 MNT4 check:
 - Article640 MNT4 already uses pointer-swap (`pF/pTmp`, `_fq4MulAndSwap`) in the hot path, so no analogous code change is needed there.
@@ -506,7 +508,8 @@ cd /Users/a.i.semenov/diploma-final
 - Article640 MNT4 fixed-shards residue: первоначально `93,705,233 gas`,
   после добавления проверки G1 - `93,734,789 function gas`;
 - Article640 MNT4 calldata+commitment residue: `93,974,409 gas`;
-- MNT6 packed residue: `103,294,551 gas`;
+- MNT6 packed residue на момент прогона: `103,294,551 gas`; актуальный
+  одиночный diagnostic digest после исправления знака: `103,277,505 gas`;
 - lollipop-305 Ehat ate residue max: `106,457,927 gas`;
 - MNT4 prepared sparse blob: `79,726,321 gas`;
 - MNT4 prepared sparse code-shards: `80,140,929 gas`.
@@ -1036,12 +1039,42 @@ cd /Users/a.i.semenov/diploma-final
 - Добавлен `MNT6Article640FixedShardsVerifier`: фиксирует shard-адреса,
   потоково читает коэффициенты через `EXTCODECOPY`, проверяет G1-точки и
   возвращает `bool` для полного уравнения сопряжений. Gas:
-  `226,073,973` для `verifyEquationFullFixedShards`.
-- Прямой перенос MNT4-style короткого `c`-свидетельства на MNT6 признан
-  некорректным: production-like MNT6 fixed-shards путь использует полную
-  оптимизированную Frobenius/w0 финальную экспоненту.
+  `226,073,973` для `verifyEquationFullFixedShards` до финального
+  residue-прохода.
+- Буквальный перенос знаков MNT4-style короткого `c`-свидетельства на MNT6
+  признан некорректным. Последующая перепроверка показала, что residue-путь
+  переносится с отдельным отношением `r_MNT6=q_MNT6-N`; актуальный основной
+  вызов описан ниже.
 - Корневой `scripts/run_all.sh` запускает актуальную ordinary-FRI cost model.
 - `baselines/naive_tate_mnt4` явно оформлен как cost model: измеренные
   математически корректные микроблоки плюс строгая нижняя экстраполяция.
   Полный исполняемый reference MNT4 остается в
   `implementations/full_onchain_mnt4`.
+
+## 2026-06-01: MNT6 shared multi-Miller residue verifier
+
+- Перепроверено прежнее предположение о неприменимости короткого Article640
+  `c`-отношения к MNT6. Буквальное копирование знаков MNT4 действительно
+  неверно, но residue-путь переносится после учета
+  `r_MNT6 = q_MNT6 - N`. Для MNT6 контракт проверяет
+  `F * c^(N-q) = F * c^(-r) = 1`.
+- Rust backend MNT6 теперь генерирует `c`, `cInv` и подтверждает
+  `c^r = F` для нетривиального уравнения
+  `e(2G1,G2)=e(G1,2G2)`.
+- В `MNT6AteLoop` добавлен общий packed code-shards multi-Miller accumulator:
+  обе пары обрабатываются в одном цикле, поэтому возведение аккумулятора в
+  квадрат выполняется один раз на раунд. Полная FE в основном API не
+  вычисляется.
+- Добавлен основной API
+  `verifyEquationResidueFixedShards(P,R,c,cInv) -> bool`; прежний
+  `verifyEquationFullFixedShards` сохранен как контрольный baseline.
+- Проверка: `implementations/article640_mnt6` проходит `13/13` Foundry-тестов,
+  включая корректное уравнение, подмену `cInv`, ложное уравнение на валидных
+  точках и раннее отклонение точки вне G1 в новом residue API.
+- Function gas: baseline с полной packed FE `226,078,963`; общий residue
+  verifier `172,004,717`; экономия `54,074,246 gas` (`23.92%`).
+- Runtime size основного fixed-shards контракта: `20,312 bytes`, запас до
+  EIP-170: `4,264 bytes`.
+- Полный корневой `./scripts/run_all.sh` завершен с кодом `0`: пройдены
+  арифметические модули, MNT4/MNT6 Article640, Rust fixture cross-check,
+  MNT-cycle accounting и актуальная ordinary-FRI cost model.

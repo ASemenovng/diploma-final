@@ -73,7 +73,7 @@ Article640 MNT4/MNT6, lollipop-305, Rust backend-ы, MNT-cycle модель и
 | lollipop 2-limb | `cd arithmetic/lollipop305_2limb && forge test -vv` | 22 теста пройдено |
 | Full on-chain MNT4 | `cd implementations/full_onchain_mnt4 && forge test -vv` | 116 тестов пройдено |
 | Article640 MNT4 | `cd implementations/article640_mnt4 && forge test -vv` | 31 тест пройден |
-| Article640 MNT6 | `cd implementations/article640_mnt6 && forge test -vv` | 9 тестов пройдено |
+| Article640 MNT6 | `cd implementations/article640_mnt6 && forge test -vv` | 13 тестов пройдено |
 | lollipop-305 | `cd implementations/lollipop305 && forge test -vv` | 31 тест пройден |
 | DEEP-FRI archive | `cd implementations/research_variants/mnt4_merkle_deep_fri_microtrace && ./scripts/run_report.sh` | Rust 9/9, Foundry 21/21 |
 
@@ -159,20 +159,20 @@ cd implementations/mnt4_merkle_fri_cost_model
 |---|---:|
 | Полный packed путь | 312 184 436 |
 | Packed FE path | 131 685 843 |
-| Packed residue digest | 103 294 551 |
+| Packed residue digest одного сопряжения | 103 277 505 |
 | Packed FE isolated | 38 428 108 |
 | Generic FE | 218 388 832 |
-| Fixed-shards bool equation verifier function gas с проверкой G1 | 226 073 973 |
+| Fixed-shards bool equation с полной packed FE и проверкой G1 | 226 078 963 |
+| Fixed-shards bool residue equation с общим аккумулятором и проверкой G1 | 172 004 717 |
 
-Последняя строка является сопоставимым с MNT4 production-like режимом:
+Последняя строка является сопоставимым с MNT4 основным fixed-shards режимом:
 контракт фиксирует адреса code-shards, потоково читает prepared coefficients,
-проверяет входные G1-точки, выполняет два Miller loop и проверяет, что полная
-оптимизированная финальная экспонента результата равна единице.
-
-MNT4-style короткое `c`-свидетельство нельзя механически перенести на MNT6:
-соответствующее разложение показателя не дает обратимого показателя в нужной
-подгруппе. Поэтому безопасный MNT6 fixed-shards verifier использует полную
-оптимизированную Frobenius/w0 финальную экспоненту.
+проверяет входные G1-точки и использует один общий multi-Miller аккумулятор:
+возведение в квадрат выполняется один раз на раунд, после чего в аккумулятор
+последовательно домножаются линии для обеих пар. Полная финальная экспонента
+заменена Article640-проверкой с `c`-свидетельством. Для MNT6 знак отличается от
+MNT4: из `r_MNT6=q_MNT6-N` следует `c^{-r}=c^{N-q}`. Экономия относительно
+контрольного режима с полной FE составляет `54 074 246 gas`, или `23.92%`.
 
 ### 4.4. lollipop-305
 

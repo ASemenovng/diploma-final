@@ -4,7 +4,7 @@
 
 **Goal:** Закрыть подтвержденные ошибки аудита: валидацию G1, MNT6 fixed-shards parity, счетчики MNT-cycle, полный naive Tate baseline и запуск ordinary-FRI модели из корневого runner-а.
 
-**Architecture:** Fixed-G2 кэши остаются доверенной предрегистрацией. Пользовательские G1-точки проверяются перед тяжелой арифметикой. MNT6 получает отдельный packed streaming fixed-shards verifier с двумя G2-кэшами и полной оптимизированной FE. Короткое MNT4-style residue-отношение не переносится на MNT6 автоматически.
+**Architecture:** Fixed-G2 кэши остаются доверенной предрегистрацией. Пользовательские G1-точки проверяются перед тяжелой арифметикой. MNT6 получает отдельный packed streaming fixed-shards verifier с двумя G2-кэшами, общим multi-Miller аккумулятором и Article640 residue-проверкой. Для MNT6 используется отдельный знак: `r=q-N`, поэтому `c^{-r}=c^{N-q}`.
 
 **Tech Stack:** Solidity 0.8.33, Foundry, Yul hot paths, Rust, arkworks.
 
@@ -60,13 +60,13 @@
 - [ ] Написать positive и negative Foundry-тесты.
 - [ ] Запустить targeted test и увидеть падение компиляции из-за отсутствующего verifier-а.
 - [ ] Реализовать потоковый packed reader code-shards.
-- [x] Проверить возможность переноса MNT4-style residue accumulator и
-      зафиксировать математическую неприменимость прямого переноса.
-- [x] Реализовать безопасный общий accumulator двух пар с полной
-      оптимизированной Frobenius/w0 финальной экспонентой.
-- [ ] Добавить G1 validation через `MNT6CurveChecks`.
-- [ ] Проверить корректный fixture и подмены.
-- [ ] Снять gas-report и runtime size.
+- [x] Проверить возможность переноса MNT4-style residue accumulator и вывести
+      корректное MNT6-отношение `F*c^(N-q)=1`.
+- [x] Реализовать общий residue accumulator двух пар с одним возведением в
+      квадрат на раунд.
+- [x] Добавить G1 validation через `MNT6CurveChecks`.
+- [x] Проверить корректный fixture и подмены.
+- [x] Снять gas-report и runtime size.
 - [ ] Зафиксировать чекпоинт git.
 
 ### Task 5: Разделить полный reference-контур и naive Tate cost model

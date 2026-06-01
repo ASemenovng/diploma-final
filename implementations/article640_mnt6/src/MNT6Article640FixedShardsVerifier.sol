@@ -12,9 +12,10 @@ import {MNT6PairingTypes} from "@arith-mnt6/MNT6PairingTypes.sol";
 ///      конфигурации развертывания: адреса data-контрактов задаются конструктором и не принимаются от
 ///      пользователя. На каждом вызове меняются только публичные точки P,R группы G1.
 ///
-///      В отличие от MNT4 экспериментальная встроенная residue-проверка MNT6 не используется:
-///      ее короткое отношение требует отдельного доказательства разрешимости. Поэтому production-путь
-///      завершает объединенный Miller product полной оптимизированной финальной экспонентой.
+///      Контракт сохраняет два режима. `verifyEquationFullFixedShards` нужен как контрольный
+///      baseline с полной оптимизированной финальной экспонентой. Production-shaped
+///      `verifyEquationResidueFixedShards` использует c-свидетельство и встраивает проверку
+///      финальной экспоненты в общий multi-Miller loop.
 contract MNT6Article640FixedShardsVerifier {
     MNT6PairingTypes.Fq3 private fixedQXOverTwist;
     MNT6PairingTypes.Fq3 private fixedQYOverTwist;
@@ -69,6 +70,40 @@ contract MNT6Article640FixedShardsVerifier {
             _negG1(r), fixedSXOverTwist, fixedSYOverTwist, dS, aS
         );
         return MNT6Fq6.eq(MNT6Fq6.finalExponentiationPacked(MNT6Fq6.mul(fQ, fS)), MNT6Fq6.one());
+    }
+
+    /// @notice Проверяет то же уравнение сопряжений через общий residue-аккумулятор и c-свидетельство.
+    /// @dev Для MNT6-753 `r=q-N`, поэтому библиотека проверяет
+    ///      `f_{N,Q}(P) * f_{N,S}(-R) * c^(N-q) = 1`.
+    ///      Так как `N-q=-r`, это эквивалентно `F=c^r`. Полная финальная
+    ///      экспонента не выполняется.
+    function verifyEquationResidueFixedShards(
+        MNT6PairingTypes.G1Point memory p,
+        MNT6PairingTypes.G1Point memory r,
+        MNT6PairingTypes.Fq6 memory c,
+        MNT6PairingTypes.Fq6 memory cInv
+    ) external view returns (bool) {
+        if (!MNT6CurveChecks.isOnG1(p) || !MNT6CurveChecks.isOnG1(r)) return false;
+        if (!MNT6Fq6.eq(MNT6Fq6.mul(c, cInv), MNT6Fq6.one())) return false;
+
+        address[] memory dQ = dblShardsQ;
+        address[] memory aQ = addShardsQ;
+        address[] memory dS = dblShardsS;
+        address[] memory aS = addShardsS;
+        return MNT6AteLoop.pairingEquationPreparedCodeShardsPackedResidueIsOne(
+            p,
+            _negG1(r),
+            fixedQXOverTwist,
+            fixedQYOverTwist,
+            fixedSXOverTwist,
+            fixedSYOverTwist,
+            c,
+            cInv,
+            dQ,
+            aQ,
+            dS,
+            aS
+        );
     }
 
     /// @notice Возвращает количество data-контрактов для четырех последовательностей коэффициентов.

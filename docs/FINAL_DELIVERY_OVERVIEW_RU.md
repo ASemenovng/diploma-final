@@ -81,15 +81,16 @@ cd /Users/a.i.semenov/diploma-final
 | Article640 MNT4 | residue equation, calldata | 93,881,355 |
 | Article640 MNT4 | residue equation, fixed-shards с проверкой G1 | 93,734,789 |
 | Article640 MNT4 | residue equation, calldata+commitment | 93,974,409 |
-| MNT6 | fixed-shards bool equation с проверкой G1 и полной optimized FE | 226,073,973 |
+| MNT6 | fixed-shards bool residue equation с проверкой G1 | 172,004,717 |
 | lollipop-305 | Ehat ate residue verifier | 106,457,927 |
 | lollipop-305 | Ehat Weil equation | 201,002,138 |
 
 ## 5. Ограничения
 
-В `implementations/article640_mnt6` диагностические residue-фрагменты сохранены
-только для исследования стоимости. Production-like fixed-shards API использует
-полную оптимизированную финальную экспоненту: короткий MNT4-style residue-путь
-нельзя автоматически переносить на MNT6 без отдельного доказательства.
+В `implementations/article640_mnt6` сохранены оба сопоставимых режима:
+контрольный fixed-shards baseline с полной оптимизированной финальной
+экспонентой (`226,078,963 gas`) и основной fixed-shards residue verifier
+(`172,004,717 gas`). Для MNT6 перенос требует другого знака: поскольку
+`r_MNT6=q_MNT6-N`, проверяется отношение `F*c^(N-q)=1`.
 
 Build artifacts (`out`, `cache`, `target`) не входят в поставку. Скрипты пересобирают проект заново.

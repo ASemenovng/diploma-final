@@ -8,5 +8,6 @@ print_gas_rows "$log" \
   "pairingPreparedPackedFullDigestWithPackedFE" \
   "pairingPreparedPackedResidueDigest" \
   "finalExponentiationPackedDigest" \
-  "verifyEquationFullFixedShards"
+  "verifyEquationFullFixedShards" \
+  "verifyEquationResidueFixedShards"
 print_pass_summary "$log"

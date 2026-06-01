@@ -298,6 +298,210 @@ library MNT6AteLoop {
         return MNT6PackedArithmetic.fq6Load(f);
     }
 
+    /// @notice Проверяет уравнение сопряжений для двух фиксированных G2-точек через общий residue-аккумулятор.
+    /// @dev Функция является MNT6-аналогом MNT4 Article640 hot path. Она вычисляет
+    ///
+    ///        F = f_{N,Q}(P) * f_{N,S}(-R)
+    ///
+    ///      и одновременно встраивает проверку `F * c^{-r} = 1`. Для MNT6-753
+    ///      порядок подгруппы имеет вид `r = q - N`, поэтому
+    ///
+    ///        c^{-r} = c^{N-q}.
+    ///
+    ///      Степень `c^N` накапливается бесплатно относительно signed ate-loop:
+    ///      общий аккумулятор начинает с `c`, возводится в квадрат один раз на
+    ///      раунд и на ненулевой цифре дополнительно умножается на `c` или
+    ///      `c^{-1}`. Хвост `c^{-q}` вычисляется одним отображением Фробениуса.
+    ///
+    ///      В отличие от двух независимых Miller loop здесь каждое возведение
+    ///      аккумулятора в квадрат выполняется один раз для обеих пар.
+    function pairingEquationPreparedCodeShardsPackedResidueIsOne(
+        MNT6PairingTypes.G1Point memory p,
+        MNT6PairingTypes.G1Point memory negR,
+        MNT6PairingTypes.Fq3 memory qXOverTwist,
+        MNT6PairingTypes.Fq3 memory qYOverTwist,
+        MNT6PairingTypes.Fq3 memory sXOverTwist,
+        MNT6PairingTypes.Fq3 memory sYOverTwist,
+        MNT6PairingTypes.Fq6 memory c,
+        MNT6PairingTypes.Fq6 memory cInv,
+        address[] memory dblShardsQ,
+        address[] memory addShardsQ,
+        address[] memory dblShardsS,
+        address[] memory addShardsS
+    ) internal view returns (bool) {
+        (uint256 dQShard, uint256 dQOff, uint256 dQSize) =
+            _initCodeShardStream(dblShardsQ, MNT6_DBL_COUNT * DBL_STEP_BYTES);
+        (uint256 aQShard, uint256 aQOff, uint256 aQSize) =
+            _initCodeShardStream(addShardsQ, MNT6_ADD_COUNT * ADD_STEP_BYTES);
+        (uint256 dSShard, uint256 dSOff, uint256 dSSize) =
+            _initCodeShardStream(dblShardsS, MNT6_DBL_COUNT * DBL_STEP_BYTES);
+        (uint256 aSShard, uint256 aSOff, uint256 aSSize) =
+            _initCodeShardStream(addShardsS, MNT6_ADD_COUNT * ADD_STEP_BYTES);
+
+        uint256 base = MNT6PackedArithmetic.arenaPtr(512);
+        uint256 f = base;
+        uint256 fSqr = base + 0x240;
+        uint256 next = base + 0x480;
+        uint256 pXTwist = base + 0x6c0;
+        uint256 pYTwist = base + 0x7e0;
+        uint256 rXTwist = base + 0x900;
+        uint256 rYTwist = base + 0xa20;
+        uint256 qX = base + 0xb40;
+        uint256 qY = base + 0xc60;
+        uint256 qYNeg = base + 0xd80;
+        uint256 sX = base + 0xea0;
+        uint256 sY = base + 0xfc0;
+        uint256 sYNeg = base + 0x10e0;
+        uint256 qL1 = base + 0x1200;
+        uint256 sL1 = base + 0x1320;
+        uint256 cH = base + 0x1440;
+        uint256 c4C = base + 0x1560;
+        uint256 cJ = base + 0x1680;
+        uint256 cL = base + 0x17a0;
+        uint256 addL1 = base + 0x18c0;
+        uint256 addRZ = base + 0x19e0;
+        uint256 g0 = base + 0x1b00;
+        uint256 g1 = base + 0x1c20;
+        uint256 tmp3 = base + 0x1d40;
+        uint256 pC = base + 0x1e60;
+        uint256 pCInv = base + 0x20a0;
+        uint256 pCInvQ = base + 0x22e0;
+        uint256 scratch = base + 0x2520;
+
+        MNT6PackedArithmetic.fq6StoreTo(pC, c);
+        MNT6PackedArithmetic.fq6StoreTo(pCInv, cInv);
+        // Начальная степень c равна 1. После signed double-and-add получаем c^N.
+        MNT6PackedArithmetic.fq6CopyTo(f, pC);
+
+        _storeTwistedG1To(pXTwist, pYTwist, p);
+        _storeTwistedG1To(rXTwist, rYTwist, negR);
+        MNT6PackedArithmetic.fq3StoreTo(qX, qXOverTwist);
+        MNT6PackedArithmetic.fq3StoreTo(qY, qYOverTwist);
+        MNT6PackedArithmetic.fq3NegTo(qYNeg, qY);
+        MNT6PackedArithmetic.fq3StoreTo(sX, sXOverTwist);
+        MNT6PackedArithmetic.fq3StoreTo(sY, sYOverTwist);
+        MNT6PackedArithmetic.fq3NegTo(sYNeg, sY);
+        _buildL1To(qL1, tmp3, p.x, qX);
+        _buildL1To(sL1, tmp3, negR.x, sX);
+
+        for (uint256 i = 0; i < MNT6_DBL_COUNT; ++i) {
+            // Один общий квадрат обслуживает сразу обе пары сопряжения и степень c^N.
+            MNT6PackedArithmetic.fq6SqrTo(fSqr, f, scratch);
+            (f, fSqr) = (fSqr, f);
+
+            (dQShard, dQOff, dQSize) =
+                _streamLoadFq3To(cH, dblShardsQ, dQShard, dQOff, dQSize);
+            (dQShard, dQOff, dQSize) =
+                _streamLoadFq3To(c4C, dblShardsQ, dQShard, dQOff, dQSize);
+            (dQShard, dQOff, dQSize) =
+                _streamLoadFq3To(cJ, dblShardsQ, dQShard, dQOff, dQSize);
+            (dQShard, dQOff, dQSize) =
+                _streamLoadFq3To(cL, dblShardsQ, dQShard, dQOff, dQSize);
+            _mulDoubleLineTo(next, f, cH, c4C, cJ, cL, pXTwist, pYTwist, g0, g1, scratch);
+            (f, next) = (next, f);
+
+            (dSShard, dSOff, dSSize) =
+                _streamLoadFq3To(cH, dblShardsS, dSShard, dSOff, dSSize);
+            (dSShard, dSOff, dSSize) =
+                _streamLoadFq3To(c4C, dblShardsS, dSShard, dSOff, dSSize);
+            (dSShard, dSOff, dSSize) =
+                _streamLoadFq3To(cJ, dblShardsS, dSShard, dSOff, dSSize);
+            (dSShard, dSOff, dSSize) =
+                _streamLoadFq3To(cL, dblShardsS, dSShard, dSOff, dSSize);
+            _mulDoubleLineTo(next, f, cH, c4C, cJ, cL, rXTwist, rYTwist, g0, g1, scratch);
+            (f, next) = (next, f);
+
+            int8 digit = loopDigit(i);
+            if (digit == 0) continue;
+
+            (aQShard, aQOff, aQSize) =
+                _streamLoadFq3To(addL1, addShardsQ, aQShard, aQOff, aQSize);
+            (aQShard, aQOff, aQSize) =
+                _streamLoadFq3To(addRZ, addShardsQ, aQShard, aQOff, aQSize);
+            _mulAddLineTo(next, f, digit == 1 ? qY : qYNeg, qL1, pYTwist, addL1, addRZ, g0, g1, tmp3, scratch);
+            (f, next) = (next, f);
+
+            (aSShard, aSOff, aSSize) =
+                _streamLoadFq3To(addL1, addShardsS, aSShard, aSOff, aSSize);
+            (aSShard, aSOff, aSSize) =
+                _streamLoadFq3To(addRZ, addShardsS, aSShard, aSOff, aSSize);
+            _mulAddLineTo(next, f, digit == 1 ? sY : sYNeg, sL1, rYTwist, addL1, addRZ, g0, g1, tmp3, scratch);
+            (f, next) = (next, f);
+
+            // Для MNT6 r=q-N: signed digit +1 добавляет c, digit -1 добавляет c^{-1}.
+            MNT6PackedArithmetic.fq6MulTo(next, f, digit == 1 ? pC : pCInv, scratch);
+            (f, next) = (next, f);
+        }
+
+        require(dQShard == dblShardsQ.length && dQOff == 0 && dQSize == 0, "bad dbl Q stream end");
+        require(aQShard == addShardsQ.length && aQOff == 0 && aQSize == 0, "bad add Q stream end");
+        require(dSShard == dblShardsS.length && dSOff == 0 && dSSize == 0, "bad dbl S stream end");
+        require(aSShard == addShardsS.length && aSOff == 0 && aSSize == 0, "bad add S stream end");
+
+        // Итоговая степень witness: c^N * c^{-q} = c^{N-q} = c^{-r}.
+        MNT6PackedArithmetic.fq6StoreTo(pCInvQ, MNT6Fq6.frobeniusMap(cInv, 1));
+        MNT6PackedArithmetic.fq6MulTo(next, f, pCInvQ, scratch);
+        return MNT6Fq6.eq(MNT6PackedArithmetic.fq6Load(next), MNT6Fq6.one());
+    }
+
+    /// @notice Записывает координаты G1-точки в Fq3-формате twist-умножения.
+    function _storeTwistedG1To(uint256 xTwist, uint256 yTwist, MNT6PairingTypes.G1Point memory p) private pure {
+        MNT6PackedArithmetic.zeroTo(xTwist, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(xTwist + 0x60, p.x);
+        MNT6PackedArithmetic.zeroTo(yTwist, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(yTwist + 0x60, p.y);
+    }
+
+    /// @notice Строит l1=P.x-Q.x/twist для addition-линий подготовленного G2-кэша.
+    function _buildL1To(uint256 out, uint256 tmp, MNT6PairingTypes.Fp memory x, uint256 qX) private pure {
+        MNT6PackedArithmetic.zeroTo(tmp, 0x120);
+        MNT6PackedArithmetic.fpStoreTo(tmp, x);
+        MNT6PackedArithmetic.fq3SubTo(out, tmp, qX);
+    }
+
+    /// @notice Вычисляет line evaluation doubling-шагa и умножает аккумулятор на разреженную линию.
+    function _mulDoubleLineTo(
+        uint256 out,
+        uint256 f,
+        uint256 cH,
+        uint256 c4C,
+        uint256 cJ,
+        uint256 cL,
+        uint256 xTwist,
+        uint256 yTwist,
+        uint256 g0,
+        uint256 g1,
+        uint256 scratch
+    ) private pure {
+        MNT6PackedArithmetic.fq3SubTo(g0, cL, c4C);
+        MNT6PackedArithmetic.fq3MulTo(g1, cJ, xTwist, scratch);
+        MNT6PackedArithmetic.fq3SubTo(g0, g0, g1);
+        MNT6PackedArithmetic.fq3MulTo(g1, cH, yTwist, scratch);
+        MNT6PackedArithmetic.fq6MulByLineTo(out, f, g0, g1, scratch);
+    }
+
+    /// @notice Вычисляет line evaluation addition-шагa и умножает аккумулятор на разреженную линию.
+    function _mulAddLineTo(
+        uint256 out,
+        uint256 f,
+        uint256 signedY,
+        uint256 l1,
+        uint256 yTwist,
+        uint256 addL1,
+        uint256 addRZ,
+        uint256 g0,
+        uint256 g1,
+        uint256 tmp3,
+        uint256 scratch
+    ) private pure {
+        MNT6PackedArithmetic.fq3MulTo(g0, addRZ, yTwist, scratch);
+        MNT6PackedArithmetic.fq3MulTo(g1, signedY, addRZ, scratch);
+        MNT6PackedArithmetic.fq3MulTo(tmp3, l1, addL1, scratch);
+        MNT6PackedArithmetic.fq3AddTo(g1, g1, tmp3);
+        MNT6PackedArithmetic.fq3NegTo(g1, g1);
+        MNT6PackedArithmetic.fq6MulByLineTo(out, f, g0, g1, scratch);
+    }
+
     /// @notice Формирует подготовленные данные `millerLoopPreparedBlobPackedResidue`, которые затем переиспользуются в цикле Миллера.
     function millerLoopPreparedBlobPackedResidue(
         MNT6PairingTypes.G1Point memory p,
@@ -337,7 +541,9 @@ library MNT6AteLoop {
 
         MNT6PackedArithmetic.fq6StoreTo(pC, c);
         MNT6PackedArithmetic.fq6StoreTo(pCInv, cInv);
-        MNT6PackedArithmetic.fq6CopyTo(f, pCInv);
+        // MNT6-753 has r=q-N. Start with c and accumulate c^N in parallel
+        // with the Miller loop; the Frobenius tail below contributes c^{-q}.
+        MNT6PackedArithmetic.fq6CopyTo(f, pC);
 
         MNT6PackedArithmetic.zeroTo(pXTwist, 0x120);
         MNT6PackedArithmetic.fpStoreTo(pXTwist + 0x60, p.x);
@@ -381,7 +587,7 @@ library MNT6AteLoop {
                 MNT6PackedArithmetic.fq3AddTo(g1, g1, tmp3);
                 MNT6PackedArithmetic.fq3NegTo(g1, g1);
                 MNT6PackedArithmetic.fq6MulByLineTo(next, f, g0, g1, scratch);
-                MNT6PackedArithmetic.fq6MulTo(f, next, bit == 1 ? pCInv : pC, scratch);
+                MNT6PackedArithmetic.fq6MulTo(f, next, bit == 1 ? pC : pCInv, scratch);
             }
         }
 
@@ -515,6 +721,8 @@ library MNT6AteLoop {
             nextOffsetBytes = 0;
             if (nextShardIdx < shards.length) {
                 nextShardSize = _extCodeSize(shards[nextShardIdx]);
+            } else {
+                nextShardSize = 0;
             }
         }
     }
