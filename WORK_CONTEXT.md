@@ -957,8 +957,7 @@ cd /Users/a.i.semenov/diploma-final
 
 - В `/Users/a.i.semenov/diploma-final` создан локальный Git-репозиторий.
   Исходное состояние зафиксировано checkpoint-коммитом `a108281`.
-- Для эксперимента открыта ветка:
-  `codex/mnt4-native-fri-cost-model`.
+- Для эксперимента была открыта отдельная рабочая ветка.
 - Реализован Rust crate:
   `implementations/mnt4_merkle_fri_cost_model/rust/native_fri_cost_model`.
 - Команда запуска:

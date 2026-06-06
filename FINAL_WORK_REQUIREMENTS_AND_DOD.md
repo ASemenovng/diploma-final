@@ -63,7 +63,7 @@ The implementation does not need to implement the final folding scheme itself, b
 
 ## 5. Current status after local stages 1-7
 
-Implemented locally on branch `codex/stage3-line-cache-relation` in `/Users/a.i.semenov/mnt4-pairing-final`:
+Implemented locally during stages 1-7:
 
 1. Full on-chain baseline and gas report.
 2. Rust MNT4 backend producing pairing artifacts.
