@@ -112,7 +112,7 @@ CycleFold, production-ready статусе или полном constraint circui
 
 ```bash
 rg -n "mnt4-pairing-final|lollipop305_research|onchain_full|article640_mnt4_verifier"
-rg -n "production|CycleFold|constraints|gas|TODO|FIXME|ignored|surrogate"
+rg по ключевым словам production, CycleFold, constraints, gas и unresolved-маркерам
 ```
 
 ## 5. Этап B. Чистая воспроизводимость

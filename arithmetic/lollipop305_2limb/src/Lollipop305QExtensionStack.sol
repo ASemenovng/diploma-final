@@ -17,8 +17,14 @@ library Lollipop305QExtensionStack {
 
     /// @notice Выполняет умножение `fq2Mul`; точный уровень поля и специальный множитель отражены в названии.
     function fq2Mul(
-        uint256 a00, uint256 a01, uint256 a10, uint256 a11,
-        uint256 b00, uint256 b01, uint256 b10, uint256 b11
+        uint256 a00,
+        uint256 a01,
+        uint256 a10,
+        uint256 a11,
+        uint256 b00,
+        uint256 b01,
+        uint256 b10,
+        uint256 b11
     ) internal pure returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11) {
         (uint256 sA0, uint256 sA1) = BigIntLollipop305Q.add2(a00, a01, a10, a11);
         (uint256 sB0, uint256 sB1) = BigIntLollipop305Q.add2(b00, b01, b10, b11);
@@ -32,9 +38,11 @@ library Lollipop305QExtensionStack {
     }
 
     /// @notice Возводит значение в квадрат: `fq2Sqr`.
-    function fq2Sqr(
-        uint256 a00, uint256 a01, uint256 a10, uint256 a11
-    ) internal pure returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11) {
+    function fq2Sqr(uint256 a00, uint256 a01, uint256 a10, uint256 a11)
+        internal
+        pure
+        returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11)
+    {
         (uint256 v00, uint256 v01) = BigIntLollipop305Q.montSqr2(a00, a01);
         (uint256 v10, uint256 v11) = BigIntLollipop305Q.montSqr2(a10, a11);
         (uint256 twoV10, uint256 twoV11) = BigIntLollipop305Q.add2(v10, v11, v10, v11);
@@ -45,8 +53,14 @@ library Lollipop305QExtensionStack {
 
     /// @notice Выполняет сложение `fq2Add` с учетом модуля или структуры текущего поля.
     function fq2Add(
-        uint256 a00, uint256 a01, uint256 a10, uint256 a11,
-        uint256 b00, uint256 b01, uint256 b10, uint256 b11
+        uint256 a00,
+        uint256 a01,
+        uint256 a10,
+        uint256 a11,
+        uint256 b00,
+        uint256 b01,
+        uint256 b10,
+        uint256 b11
     ) internal pure returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11) {
         (c00, c01) = BigIntLollipop305Q.add2(a00, a01, b00, b01);
         (c10, c11) = BigIntLollipop305Q.add2(a10, a11, b10, b11);
@@ -54,26 +68,30 @@ library Lollipop305QExtensionStack {
 
     /// @notice Выполняет вычитание `fq2Sub` с учетом модуля или структуры текущего поля.
     function fq2Sub(
-        uint256 a00, uint256 a01, uint256 a10, uint256 a11,
-        uint256 b00, uint256 b01, uint256 b10, uint256 b11
+        uint256 a00,
+        uint256 a01,
+        uint256 a10,
+        uint256 a11,
+        uint256 b00,
+        uint256 b01,
+        uint256 b10,
+        uint256 b11
     ) internal pure returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11) {
         (c00, c01) = BigIntLollipop305Q.sub2(a00, a01, b00, b01);
         (c10, c11) = BigIntLollipop305Q.sub2(a10, a11, b10, b11);
     }
 
     /// @notice Выполняет умножение `fq2MulByRho`; точный уровень поля и специальный множитель отражены в названии.
-    function fq2MulByRho(
-        uint256 a00, uint256 a01, uint256 a10, uint256 a11
-    ) internal pure returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11) {
+    function fq2MulByRho(uint256 a00, uint256 a01, uint256 a10, uint256 a11)
+        internal
+        pure
+        returns (uint256 c00, uint256 c01, uint256 c10, uint256 c11)
+    {
         return fq2Mul(a00, a01, a10, a11, RHO_00, RHO_01, RHO_10, RHO_11);
     }
 
     /// @dev Fq6 = Fq2[w]/(w^3-rho), encoded as c0 + c1*w + c2*w^2.
-    function fq6Mul(uint256[12] memory a, uint256[12] memory b)
-        internal
-        pure
-        returns (uint256[12] memory c)
-    {
+    function fq6Mul(uint256[12] memory a, uint256[12] memory b) internal pure returns (uint256[12] memory c) {
         uint256[4] memory v0;
         uint256[4] memory v1;
         uint256[4] memory v2;
@@ -117,7 +135,41 @@ library Lollipop305QExtensionStack {
 
     /// @notice Возводит значение в квадрат: `fq6Sqr`.
     function fq6Sqr(uint256[12] memory a) internal pure returns (uint256[12] memory c) {
-        return fq6Mul(a, a);
+        return fq6SqrSpecialized(a);
+    }
+
+    /// @notice Возводит элемент Fq6 в квадрат по отдельной формуле вместо общего умножения.
+    /// @dev Для a=a0+a1*w+a2*w^2 и w^3=rho:
+    ///      c0=a0^2+2*rho*a1*a2;
+    ///      c1=2*a0*a1+rho*a2^2;
+    ///      c2=a1^2+2*a0*a2.
+    ///      Формула уменьшает число дорогих умножений Fq2 и используется как кандидат
+    ///      для горячего Ehat Miller loop после отдельной gas-проверки.
+    function fq6SqrSpecialized(uint256[12] memory a) internal pure returns (uint256[12] memory c) {
+        uint256[4] memory t0;
+        uint256[4] memory t1;
+        uint256[4] memory t2;
+        uint256[4] memory rhoT;
+
+        // c0 = a0^2 + 2*rho*a1*a2.
+        (t0[0], t0[1], t0[2], t0[3]) = fq2Sqr(a[0], a[1], a[2], a[3]);
+        (t1[0], t1[1], t1[2], t1[3]) = fq2Mul(a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]);
+        (t1[0], t1[1], t1[2], t1[3]) = fq2Add(t1[0], t1[1], t1[2], t1[3], t1[0], t1[1], t1[2], t1[3]);
+        (rhoT[0], rhoT[1], rhoT[2], rhoT[3]) = fq2MulByRho(t1[0], t1[1], t1[2], t1[3]);
+        (c[0], c[1], c[2], c[3]) = fq2Add(t0[0], t0[1], t0[2], t0[3], rhoT[0], rhoT[1], rhoT[2], rhoT[3]);
+
+        // c1 = 2*a0*a1 + rho*a2^2.
+        (t0[0], t0[1], t0[2], t0[3]) = fq2Mul(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+        (t0[0], t0[1], t0[2], t0[3]) = fq2Add(t0[0], t0[1], t0[2], t0[3], t0[0], t0[1], t0[2], t0[3]);
+        (t2[0], t2[1], t2[2], t2[3]) = fq2Sqr(a[8], a[9], a[10], a[11]);
+        (rhoT[0], rhoT[1], rhoT[2], rhoT[3]) = fq2MulByRho(t2[0], t2[1], t2[2], t2[3]);
+        (c[4], c[5], c[6], c[7]) = fq2Add(t0[0], t0[1], t0[2], t0[3], rhoT[0], rhoT[1], rhoT[2], rhoT[3]);
+
+        // c2 = a1^2 + 2*a0*a2.
+        (t0[0], t0[1], t0[2], t0[3]) = fq2Sqr(a[4], a[5], a[6], a[7]);
+        (t1[0], t1[1], t1[2], t1[3]) = fq2Mul(a[0], a[1], a[2], a[3], a[8], a[9], a[10], a[11]);
+        (t1[0], t1[1], t1[2], t1[3]) = fq2Add(t1[0], t1[1], t1[2], t1[3], t1[0], t1[1], t1[2], t1[3]);
+        (c[8], c[9], c[10], c[11]) = fq2Add(t0[0], t0[1], t0[2], t0[3], t1[0], t1[1], t1[2], t1[3]);
     }
 
     /// @notice Выполняет умножение `fq6MulBy01`; точный уровень поля и специальный множитель отражены в названии.

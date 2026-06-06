@@ -1,33 +1,43 @@
 # diploma-final
 
-Чистовая поставка кода для дипломной работы. Исходная рабочая директория `/Users/a.i.semenov/mnt4-pairing-final` не изменялась; здесь оставлена структурированная версия без старых дублирующих модулей.
+Чистовая поставка кода практической части дипломной работы. Репозиторий разделен на production-пути, исследовательские варианты и документы так, чтобы проверяющий мог воспроизвести основные измерения без обращения к старым рабочим директориям.
 
-## Структура
+## Что реализовано
 
-| Директория | Назначение |
+| Блок | Смысл |
 |---|---|
-| `arithmetic/mnt4_3limb/` | Общая 3-limb арифметика MNT4-753: чистовой Montgomery/CIOS-путь в `src/`, сравнения Barrett/FIOS/Comba/branchless/lazy/sparse в `research_variants/`. |
-| `arithmetic/mnt6_3limb/` | Общая 3-limb арифметика MNT6-753: `Fp`, `Fq3`, `Fq6`, packed hot-path, проверки кривой и ate-loop primitives. |
-| `arithmetic/lollipop305_2limb/` | Общая 2-limb арифметика lollipop-305: чистовой stack API в `src/`, альтернативные варианты в `research_variants/`. |
+| `arithmetic/mnt4_3limb/` | Общая 3-limb арифметика MNT4-753: Montgomery/CIOS, `Fq`, `Fq2`, `Fq4`, проверки точек и тесты алгоритмических вариантов. |
+| `arithmetic/mnt6_3limb/` | Общая 3-limb арифметика MNT6-753: `Fp`, `Fq3`, `Fq6`, packed hot-path, primitives для ate-loop. |
+| `arithmetic/lollipop305_2limb/` | Общая 2-limb арифметика lollipop-305: stick-field, cycle-field, packed `Fq2/Fq6` для сложного Ehat-контура. |
+| `baselines/naive_tate_mnt4/` | Наивная Tate/cost-model точка отсчета без выбранных оптимизаций. |
 | `implementations/full_onchain_mnt4/` | Полное on-chain вычисление MNT4-сопряжения и fixed-Q/prepared/code-shards baseline. |
-| `implementations/article640_mnt4/` | Основная реализация идей ePrint 2024/640 для MNT4: calldata+commitment и fixed code-shards/EXTCODECOPY варианты, плюс Rust-бэкенд для генерации fixtures. |
-| `implementations/article640_mnt6/` | MNT6-753 Article640/residue реализация поверх общей MNT6-арифметики, плюс Rust-бэкенд fixtures. |
-| `implementations/lollipop305/` | Исследовательский lollipop-305 pipeline поверх общей 2-limb арифметики, Rust reference/backend и безопасный fixed-cache режим через зафиксированные code-shards. |
-| `implementations/mnt4_merkle_fri_cost_model/` | Актуальная математическая спецификация и Rust-модель стоимости блочно-сжатого ordinary-FRI пути. |
-| `implementations/research_variants/` | Воспроизводимые, но не выбранные исследовательские варианты. |
-| `baselines/naive_tate_mnt4/` | Наивный Tate baseline без optimized hot-path; используется как отрицательная точка отсчета. |
-| `mnt_cycle_full/` | Rust-модель MNT4/MNT6 cycle-native relations и constraints. |
-| `docs/` | Отчеты, планы, оценки сложности, краткие материалы для защиты. |
+| `implementations/article640_mnt4/` | MNT4-реализация идей ePrint 2024/640: calldata+commitment, fixed code-shards/EXTCODECOPY, KZG/Merkle opening layers. |
+| `implementations/article640_mnt6/` | MNT6-753 verifier, построенный симметрично MNT4: prepared lines, общий accumulator, residue/c-свидетельство. |
+| `implementations/lollipop305/` | Исследовательский lollipop-305 pipeline: stick + cycle-E + Ehat, fixed-shards режим и Rust-бэкенды. |
+| `implementations/mnt4_merkle_fri_cost_model/` | Актуальная модель стоимости Merkle/FRI-проверки цикла Миллера без production-заявления. |
+| `implementations/research_variants/` | Архивные воспроизводимые эксперименты, которые не являются основным путем. |
+| `experiments/` | Независимые тесты идей Claude/ModExp для 3-limb умножения; используются только как исследовательские сравнения. |
+| `mnt_cycle_full/` | Rust-модель MNT4/MNT6 cycle-native учета и constraints-accounting. |
+| `docs/` | Отчеты, планы аудита, оценки сложности, материалы для руководителя и защиты. |
 | `scripts/` | Однокомандные проверки и gas-отчеты. |
 
+## Production и research разделены
+
+- В `src/` основных модулей лежат только актуальные библиотеки и контракты, которые используются финальными тестами.
+- Альтернативы Barrett/FIOS/Comba/branchless/lazy, независимые варианты Claude и архивный DEEP-FRI-прототип вынесены в `research_variants/` или `experiments/`.
+- Build artifacts (`out/`, `cache/`, `target/`, `.reports/`) не являются частью поставки и игнорируются git.
+- Некоторые исторические документы в `docs/` и `implementations/lollipop305/docs/` сохраняют старые названия директорий как контекст исследования. Актуальная структура описана в этом README и в `docs/FINAL_DELIVERY_OVERVIEW_RU.md`.
+
 ## Быстрый запуск
+
+Полный прогон:
 
 ```bash
 cd /Users/a.i.semenov/diploma-final
 ./scripts/run_all.sh
 ```
 
-Отдельные прогоны:
+Отдельные проверки:
 
 ```bash
 ./scripts/run_arith_3limb.sh
@@ -42,31 +52,28 @@ cd /Users/a.i.semenov/diploma-final
 ./scripts/run_lollipop305_backend.sh
 ./scripts/run_naive_tate.sh
 ./scripts/run_mnt_cycle.sh
+./scripts/run_mnt4_merkle_fri_cost_model.sh
 ```
 
-## Основные финальные числа
+Скрипты пишут логи в `.reports/` и печатают ключевые строки gas-report, если они есть в выводе Foundry.
 
-| Сценарий | Газ |
-|---|---:|
-| Full MNT4 on-chain fixed-Q | `259,327,933` |
-| MNT4 prepared sparse blob | `79,726,321` |
-| MNT4 prepared sparse code-shards | `80,140,929` |
-| Article640 hot residue calldata | `93,881,355` |
-| Article640 hot residue fixed-shards | `93,705,233` |
-| Article640 hot residue calldata + commitment | `93,974,409` |
-| MNT6 Article640 residue | `103,294,551` |
-| Lollipop-305 Ehat ate residue | `106,457,927` |
+## Как читать результаты
 
-Важно: `implementations/article640_mnt4` содержит оба финальных сравниваемых режима: `calldata + commitment` и `code-shards / EXTCODECOPY`. Остальные implementation-директории оставляют только наиболее полезный путь для соответствующего эксперимента.
+Работа показывает не один “магический” контракт, а границу между тремя способами оплаты вычисления:
 
-## Разделение чистового и исследовательского кода
+1. **Платить gas за on-chain арифметику.** Это реализовано в `full_onchain_mnt4`, `article640_mnt4`, `article640_mnt6` и `lollipop305`.
+2. **Платить constraints/off-chain стоимость за proof/PCS слой.** Это исследуется через KZG/Merkle/FRI и cycle-native accounting.
+3. **Менять семейство кривых.** Это исследуется через lollipop-305: 2-limb арифметика дешевле, но полный pipeline имеет собственные математические ограничения.
 
-В `src/` арифметических модулей оставлены только библиотеки, которые импортируются финальными реализациями сопряжения. Альтернативы, необходимые для сравнительных таблиц диплома, вынесены в `research_variants/` и подключаются только тестами. Типы, используемые исключительно тестовой инфраструктурой, размещены в `test_support/`.
+Ключевой вывод: локальные EVM-оптимизации и residue-проверка уменьшают стоимость, но без подходящего precompile/PCS/proof-слоя нельзя одновременно получить малые gas и малые constraints для полного production-пути.
 
-Полная MNT4-реализация сопряжения находится только в `implementations/full_onchain_mnt4/`. Она не дублируется внутри арифметического модуля: библиотека базовой арифметики остается общей зависимостью.
+## Основные документы
 
-Merkle/FRI-направление разделено аналогично: в
-`implementations/mnt4_merkle_fri_cost_model/` находится выбранная
-математическая модель стоимости, а исполняемый консервативный DEEP-FRI
-прототип перенесен в `implementations/research_variants/` как
-воспроизводимый отрицательный эксперимент.
+| Документ | Назначение |
+|---|---|
+| `docs/ARITHMETIC_ALGORITHM_STUDY_RU.md` | Сравнение алгоритмов арифметики и низкоуровневых вариантов. |
+| `docs/ALGORITHM_COMPLEXITY_ESTIMATES_RU.md` | Формальные оценки сложности в базовых операциях. |
+| `docs/MNT4_ONCHAIN_OPTIMIZATION_LADDER_RU.md` | Поэтапная оптимизация полного MNT4 on-chain пути. |
+| `docs/FINAL_NEGATIVE_AND_BOUNDARY_RESULTS_RU.md` | Итоговый граничный результат: где остается trade-off gas/constraints. |
+| `docs/PRACTICAL_IMPLEMENTATION_FULL_AUDIT_REPORT_RU.md` | Полный аудит практической части. |
+| `docs/FINAL_DELIVERY_OVERVIEW_RU.md` | Краткое описание финальной поставки. |

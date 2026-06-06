@@ -1,1 +1,0 @@
-run_mnt_cycle.sh

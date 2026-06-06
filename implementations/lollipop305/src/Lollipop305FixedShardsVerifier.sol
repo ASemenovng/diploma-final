@@ -51,6 +51,18 @@ contract Lollipop305FixedShardsVerifier is Lollipop305Article640Verifier {
         return _verifyEhatAteResidue(_readCodeShards(ehatShards, EHAT_CACHE_BYTES), px, py, c);
     }
 
+    /// @notice Оптимальный fixed-shards Ehat-вызов: product-accumulator и c^p через q-Фробениус.
+    /// @dev `cInv` передает пользователь/Rust-бэкенд, а контракт проверяет `c*cInv=1`.
+    ///      Кэш линий по-прежнему читается только из адресов, зафиксированных в конструкторе.
+    function verifyEhatAteResidueProductFrobeniusFixedShards(
+        uint256[4] memory px,
+        uint256[4] memory py,
+        uint256[12] memory c,
+        uint256[12] memory cInv
+    ) external view returns (bool) {
+        return _verifyEhatAteResidueProductFrobenius(_readCodeShards(ehatShards, EHAT_CACHE_BYTES), px, py, c, cInv);
+    }
+
     /// @notice Собирает blob из runtime-кода нескольких data-контрактов.
     /// @dev Каждый shard обязан иметь ненулевой код. Суммарный размер должен точно совпасть
     ///      с ожидаемым: лишние и недостающие байты означают некорректную deployment-конфигурацию.

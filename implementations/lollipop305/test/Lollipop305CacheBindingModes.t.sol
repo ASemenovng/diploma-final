@@ -34,6 +34,7 @@ contract Lollipop305CacheBindingModesTest is Test {
     uint256[4] private ehatPx;
     uint256[4] private ehatPy;
     uint256[12] private ehatC;
+    uint256[12] private ehatCInv;
 
     address[] private stickShards;
     address[] private cycleEShards;
@@ -72,6 +73,7 @@ contract Lollipop305CacheBindingModesTest is Test {
     function testEhatResidueModesAcceptSameFixture() public view {
         assertTrue(committed.verifyEhatAteResidueCommitted(ehatLines, ehatPx, ehatPy, ehatC));
         assertTrue(fixedShards.verifyEhatAteResidueFixedShards(ehatPx, ehatPy, ehatC));
+        assertTrue(fixedShards.verifyEhatAteResidueProductFrobeniusFixedShards(ehatPx, ehatPy, ehatC, ehatCInv));
     }
 
     /// @notice Commitment должен отбрасывать подмененный stick-кэш до тяжелого вычисления.
@@ -116,6 +118,7 @@ contract Lollipop305CacheBindingModesTest is Test {
         assertTrue(fixedShards.verifyStickResidueFixedShards(stickC, stickCInv));
         assertTrue(fixedShards.verifyCycleEResidueFixedShards(cycleEC, cycleECInv));
         assertTrue(fixedShards.verifyEhatAteResidueFixedShards(ehatPx, ehatPy, ehatC));
+        assertTrue(fixedShards.verifyEhatAteResidueProductFrobeniusFixedShards(ehatPx, ehatPy, ehatC, ehatCInv));
     }
 
     /// @notice Печатает точную длину ABI-calldata и стоимость байтов calldata для сравнения режимов.
@@ -129,6 +132,8 @@ contract Lollipop305CacheBindingModesTest is Test {
         bytes memory committedEhat =
             abi.encodeCall(committed.verifyEhatAteResidueCommitted, (ehatLines, ehatPx, ehatPy, ehatC));
         bytes memory fixedEhat = abi.encodeCall(fixedShards.verifyEhatAteResidueFixedShards, (ehatPx, ehatPy, ehatC));
+        bytes memory fixedEhatOptimized =
+            abi.encodeCall(fixedShards.verifyEhatAteResidueProductFrobeniusFixedShards, (ehatPx, ehatPy, ehatC, ehatCInv));
 
         emit log_named_uint("commitment stick calldata bytes", committedStick.length);
         emit log_named_uint("fixed-shards stick calldata bytes", fixedStick.length);
@@ -142,6 +147,8 @@ contract Lollipop305CacheBindingModesTest is Test {
         emit log_named_uint("fixed-shards Ehat calldata bytes", fixedEhat.length);
         emit log_named_uint("commitment Ehat calldata gas", _calldataGas(committedEhat));
         emit log_named_uint("fixed-shards Ehat calldata gas", _calldataGas(fixedEhat));
+        emit log_named_uint("fixed-shards optimized Ehat calldata bytes", fixedEhatOptimized.length);
+        emit log_named_uint("fixed-shards optimized Ehat calldata gas", _calldataGas(fixedEhatOptimized));
     }
 
     function _loadStickFixture() private {
@@ -170,6 +177,20 @@ contract Lollipop305CacheBindingModesTest is Test {
         ehatPx = _readFq2(data, o);
         ehatPy = _readFq2(data, o + 4 * 32);
         ehatC = _readFq6(data, o + 8 * 32);
+        ehatCInv = [
+            uint256(0x4e67f6aa7048b5f7286c79d12a08adcaa236b0a397e79f3e7d5b9e10fe6c0d2c),
+            uint256(0x1eaf206656d0b),
+            uint256(0xaf69299ed4d754202a58225b8f17e21f3d6f879def194bdd5a070664c1cec89),
+            uint256(0x19e4d1032b70d),
+            uint256(0x41449e85d1b45e9b3a5ef353758b9dc99414ea172497f9fa01cbd70cc289703),
+            uint256(0xf37864e255ff),
+            uint256(0xc11997be73b1276a100863438f42092976c7f8fd47fddcd6b719792b0a84dbc7),
+            uint256(0x17926ca365702),
+            uint256(0x822a697d17e4c8891e3398b6c2e4e7a5c7e08a5486905cf40f87c06481c6ab43),
+            uint256(0x1defa2666beb),
+            uint256(0x841785963bc12f94b666ae33f86ea2b7bbd3c721245e6955b957069b7fbdb693),
+            uint256(0xaadf6175da11)
+        ];
     }
 
     function _deployCodeShards(bytes memory blob) private returns (address[] memory shards) {

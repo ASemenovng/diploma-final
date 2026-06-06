@@ -3,6 +3,7 @@ pragma solidity 0.8.33;
 
 import {Lollipop305ExtensionStack} from "@arith-lollipop305/Lollipop305ExtensionStack.sol";
 import {Lollipop305QExtensionStack} from "@arith-lollipop305/Lollipop305QExtensionStack.sol";
+import {Lollipop305QExtensionPacked} from "@arith-lollipop305/Lollipop305QExtensionPacked.sol";
 import {BigIntLollipop305Q} from "@arith-lollipop305/BigIntLollipop305Q.sol";
 
 /// @notice Исследовательский аналог прямой Article640-проверки для семейства lollipop-305.
@@ -23,6 +24,8 @@ contract Lollipop305Article640Verifier {
     bytes private constant P_EXP = hex"01f733286263df24240b65671ab020b2f03c6035ed8fdcdd1ff464dbb7022f6583adbbb2fef163";
     /// @dev Характеристика q второго поля lollipop-цикла; используется в соответствующей сокращенной проверке.
     bytes private constant Q_EXP = hex"01f733286263df24240b65671ab020b2f03c60375479cf7ce39138369e001f5dad2ea32fdd0085";
+    /// @dev Короткая разность delta=q-p. Для Ehat/Fq2 имеем c^p=c^(q-delta)=c^q*(c^{-1})^delta.
+    bytes private constant Q_MINUS_P_EXP = hex"0166e9f29fc39cd35ae6fdeff82980e77cde0f22";
     /// @dev Полная финальная экспонента stick-кривой; оставлена для контрольного сравнения с сокращенным путем.
     bytes private constant FINAL_EXP =
         hex"522a07a0c3fc3751d314990c442fa002e44a4ca22ad81797b8de0ef7eca9c4f4c8f187fbd0747e43da2a95b80f955d1436e995d388f24c1cac8eac1b01f4a14b9a6190d66f4d4d677921e51e24970b9be0311ef0d9412f6ebffb0a1df861efa08058678cc9b8ac39a3b99d167b78930256fd6e3a3d88c7070287d6aca639aad8984624c490";
@@ -133,6 +136,30 @@ contract Lollipop305Article640Verifier {
         return _verifyEhatAteResidue(preparedLines, px, py, c);
     }
 
+    /// @notice Экспериментальная packed-проверка того же Ehat residue relation.
+    /// @dev Используется для gas-сравнения до переключения основного API.
+    function verifyEhatAteResiduePacked(
+        bytes memory preparedLines,
+        uint256[4] memory px,
+        uint256[4] memory py,
+        uint256[12] memory c
+    ) external pure returns (bool) {
+        return _verifyEhatAteResiduePacked(preparedLines, px, py, c);
+    }
+
+    /// @notice Оптимальный Ehat-путь: объединенная P/-P трасса и c^p через q-Фробениус.
+    /// @dev Вход `cInv` является обратным к c. Контракт проверяет `c*cInv=1`, поэтому
+    ///      prover не может выбрать произвольное значение для короткой степени delta.
+    function verifyEhatAteResidueProductFrobenius(
+        bytes memory preparedLines,
+        uint256[4] memory px,
+        uint256[4] memory py,
+        uint256[12] memory c,
+        uint256[12] memory cInv
+    ) external pure returns (bool) {
+        return _verifyEhatAteResidueProductFrobenius(preparedLines, px, py, c, cInv);
+    }
+
     /// @notice Внутренний Ehat-путь пересчитывает два аккумулятора prepared-Ate и проверяет c^p * F_den = F_num.
     /// @dev Линии по-прежнему вычисляются Rust-бэкендом, но безопасная обертка обязана предварительно
     ///      связать их с зарегистрированным blob. Это исключает произвольную подмену множителей prover-ом.
@@ -142,13 +169,106 @@ contract Lollipop305Article640Verifier {
         uint256[4] memory py,
         uint256[12] memory c
     ) internal pure returns (bool) {
-        (uint256[12] memory n1, uint256[12] memory d1) = _millerEhatAteNumDen(preparedLines, px, py);
-        uint256[4] memory negPy = _fq2Neg(py);
-        (uint256[12] memory n2, uint256[12] memory d2) = _millerEhatAteNumDen(preparedLines, px, negPy);
-        uint256[12] memory fNum = Lollipop305QExtensionStack.fq6Mul(n1, n2);
-        uint256[12] memory fDen = Lollipop305QExtensionStack.fq6Mul(d1, d2);
-        uint256[12] memory cp = _powFq6(c, P_EXP);
-        return _eqFq6(Lollipop305QExtensionStack.fq6Mul(cp, fDen), fNum);
+        return _verifyEhatAteResiduePacked(preparedLines, px, py, c);
+    }
+
+    /// @notice Packed pointer/scratch реализация Ehat residue relation c^p * F_den = F_num.
+    function _verifyEhatAteResiduePacked(
+        bytes memory preparedLines,
+        uint256[4] memory px,
+        uint256[4] memory py,
+        uint256[12] memory c
+    ) internal pure returns (bool) {
+        uint256 pPx;
+        uint256 pPy;
+        uint256 pNegPy;
+        uint256 pN1;
+        uint256 pD1;
+        uint256 pN2;
+        uint256 pD2;
+        uint256 pNum;
+        uint256 pDen;
+        uint256 pC;
+        uint256 pCp;
+        uint256 pLeft;
+        uint256 scratch;
+        assembly ("memory-safe") {
+            pPx := mload(0x40)
+            pPy := add(pPx, 0x80)
+            pNegPy := add(pPy, 0x80)
+            pN1 := add(pNegPy, 0x80)
+            pD1 := add(pN1, 0x180)
+            pN2 := add(pD1, 0x180)
+            pD2 := add(pN2, 0x180)
+            pNum := add(pD2, 0x180)
+            pDen := add(pNum, 0x180)
+            pC := add(pDen, 0x180)
+            pCp := add(pC, 0x180)
+            pLeft := add(pCp, 0x180)
+            scratch := add(pLeft, 0x180)
+            mstore(0x40, add(scratch, 0x2000))
+        }
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPx, px);
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPy, py);
+        Lollipop305QExtensionPacked.fq2NegTo(pNegPy, pPy);
+        Lollipop305QExtensionPacked.copyFq6FromArray(pC, c);
+        _millerEhatAteNumDenPackedOne(preparedLines, pPx, pPy, pN1, pD1, scratch);
+        _millerEhatAteNumDenPackedOne(preparedLines, pPx, pNegPy, pN2, pD2, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pNum, pN1, pN2, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pDen, pD1, pD2, scratch);
+        _powFq6PackedTo(pCp, pC, P_EXP, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pLeft, pCp, pDen, scratch);
+        return Lollipop305QExtensionPacked.fq6Eq(pLeft, pNum);
+    }
+
+    /// @notice Новый hot path для Ehat: product trace + Frobenius decomposition.
+    /// @dev Проверяется то же отношение `c^p * F_den = F_num`, но:
+    ///      1) F_num и F_den строятся за один проход по blob линий для P и -P;
+    ///      2) c^p считается как c^q*(c^{-1})^(q-p), где c^q -- дешевый Фробениус.
+    function _verifyEhatAteResidueProductFrobenius(
+        bytes memory preparedLines,
+        uint256[4] memory px,
+        uint256[4] memory py,
+        uint256[12] memory c,
+        uint256[12] memory cInv
+    ) internal pure returns (bool) {
+        uint256 pPx;
+        uint256 pPy;
+        uint256 pNum;
+        uint256 pDen;
+        uint256 pC;
+        uint256 pCInv;
+        uint256 pOne;
+        uint256 pInvCheck;
+        uint256 pCp;
+        uint256 pLeft;
+        uint256 scratch;
+        assembly ("memory-safe") {
+            pPx := mload(0x40)
+            pPy := add(pPx, 0x80)
+            pNum := add(pPy, 0x80)
+            pDen := add(pNum, 0x180)
+            pC := add(pDen, 0x180)
+            pCInv := add(pC, 0x180)
+            pOne := add(pCInv, 0x180)
+            pInvCheck := add(pOne, 0x180)
+            pCp := add(pInvCheck, 0x180)
+            pLeft := add(pCp, 0x180)
+            scratch := add(pLeft, 0x180)
+            mstore(0x40, add(scratch, 0x2400))
+        }
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPx, px);
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPy, py);
+        Lollipop305QExtensionPacked.copyFq6FromArray(pC, c);
+        Lollipop305QExtensionPacked.copyFq6FromArray(pCInv, cInv);
+        Lollipop305QExtensionPacked.fq6OneTo(pOne, Q_ONE_0, Q_ONE_1);
+        Lollipop305QExtensionPacked.fq6MulTo(pInvCheck, pC, pCInv, scratch);
+        if (!Lollipop305QExtensionPacked.fq6Eq(pInvCheck, pOne)) return false;
+
+        _millerEhatAteProductPacked(preparedLines, pPx, pPy, pNum, pDen, scratch);
+        _powFq6PViaFrobeniusTo(pCp, pC, pCInv, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pLeft, pCp, pDen, scratch);
+        return Lollipop305QExtensionPacked.fq6Eq(pLeft, pNum);
     }
 
     /// @notice Возвращает digest трех частей Ehat-проверки: c^p, числителя F_num и знаменателя F_den.
@@ -178,6 +298,75 @@ contract Lollipop305Article640Verifier {
         (uint256[12] memory n2, uint256[12] memory d2) = _millerEhatAteNumDen(preparedLines, px, negPy);
         fNum = Lollipop305QExtensionStack.fq6Mul(n1, n2);
         fDen = Lollipop305QExtensionStack.fq6Mul(d1, d2);
+    }
+
+    /// @notice Возвращает тот же Ehat trace через packed pointer/scratch реализацию.
+    /// @dev Функция нужна для независимого сравнения с legacy trace и Rust-fixture
+    ///      перед переключением пользовательского verifier-вызова на новый hot path.
+    function ehatAteResidueRawPacked(bytes memory preparedLines, uint256[4] memory px, uint256[4] memory py)
+        external
+        pure
+        returns (uint256[12] memory fNum, uint256[12] memory fDen)
+    {
+        uint256 pPx;
+        uint256 pPy;
+        uint256 pNegPy;
+        uint256 pN1;
+        uint256 pD1;
+        uint256 pN2;
+        uint256 pD2;
+        uint256 pNum;
+        uint256 pDen;
+        uint256 scratch;
+        assembly ("memory-safe") {
+            pPx := mload(0x40)
+            pPy := add(pPx, 0x80)
+            pNegPy := add(pPy, 0x80)
+            pN1 := add(pNegPy, 0x80)
+            pD1 := add(pN1, 0x180)
+            pN2 := add(pD1, 0x180)
+            pD2 := add(pN2, 0x180)
+            pNum := add(pD2, 0x180)
+            pDen := add(pNum, 0x180)
+            scratch := add(pDen, 0x180)
+            mstore(0x40, add(scratch, 0x1800))
+        }
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPx, px);
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPy, py);
+        Lollipop305QExtensionPacked.fq2NegTo(pNegPy, pPy);
+        _millerEhatAteNumDenPackedOne(preparedLines, pPx, pPy, pN1, pD1, scratch);
+        _millerEhatAteNumDenPackedOne(preparedLines, pPx, pNegPy, pN2, pD2, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pNum, pN1, pN2, scratch);
+        Lollipop305QExtensionPacked.fq6MulTo(pDen, pD1, pD2, scratch);
+        fNum = Lollipop305QExtensionPacked.fq6ToArray(pNum);
+        fDen = Lollipop305QExtensionPacked.fq6ToArray(pDen);
+    }
+
+    /// @notice Возвращает Ehat trace из объединенного product-accumulator.
+    /// @dev Должен совпадать с legacy/Rust значениями F_num=N(P)N(-P), F_den=D(P)D(-P).
+    function ehatAteResidueRawProductPacked(bytes memory preparedLines, uint256[4] memory px, uint256[4] memory py)
+        external
+        pure
+        returns (uint256[12] memory fNum, uint256[12] memory fDen)
+    {
+        uint256 pPx;
+        uint256 pPy;
+        uint256 pNum;
+        uint256 pDen;
+        uint256 scratch;
+        assembly ("memory-safe") {
+            pPx := mload(0x40)
+            pPy := add(pPx, 0x80)
+            pNum := add(pPy, 0x80)
+            pDen := add(pNum, 0x180)
+            scratch := add(pDen, 0x180)
+            mstore(0x40, add(scratch, 0x1800))
+        }
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPx, px);
+        Lollipop305QExtensionPacked.copyFq2FromArray(pPy, py);
+        _millerEhatAteProductPacked(preparedLines, pPx, pPy, pNum, pDen, scratch);
+        fNum = Lollipop305QExtensionPacked.fq6ToArray(pNum);
+        fDen = Lollipop305QExtensionPacked.fq6ToArray(pDen);
     }
 
     /// @notice Возвращает digest левой и правой частей контрольного уравнения Вейля.
@@ -268,6 +457,143 @@ contract Lollipop305Article640Verifier {
         }
     }
 
+    /// @notice Packed-версия одного Ehat prepared-Ate trace.
+    /// @dev Выходные аккумуляторы и временные значения размещены в одном scratch arena.
+    ///      На doubling-step квадрат пишется во временный слот, после чего sparse-линия
+    ///      сразу умножается в итоговый аккумулятор. Полный промежуточный memory-массив
+    ///      для каждого арифметического вызова не создается.
+    function _millerEhatAteNumDenPackedOne(
+        bytes memory preparedLines,
+        uint256 pPx,
+        uint256 pPy,
+        uint256 pNum,
+        uint256 pDen,
+        uint256 scratch
+    ) internal pure {
+        require(preparedLines.length % 416 == 0, "bad ehat ate blob");
+        uint256 pNumTmp = scratch;
+        uint256 pDenTmp = scratch + 0x180;
+        uint256 pXCoeffW = scratch + 0x300;
+        uint256 pConstCoeff = scratch + 0x380;
+        uint256 pCVert = scratch + 0x400;
+        uint256 pALine = scratch + 0x480;
+        uint256 pBLine = scratch + 0x500;
+        uint256 pCVertical = scratch + 0x580;
+        uint256 inner = scratch + 0x600;
+
+        Lollipop305QExtensionPacked.fq6OneTo(pNum, Q_ONE_0, Q_ONE_1);
+        Lollipop305QExtensionPacked.fq6OneTo(pDen, Q_ONE_0, Q_ONE_1);
+        uint256 pNumCurrent = pNum;
+        uint256 pNumNext = pNumTmp;
+        uint256 pDenCurrent = pDen;
+        uint256 pDenNext = pDenTmp;
+        uint256 steps = preparedLines.length / 416;
+        for (uint256 i; i < steps;) {
+            uint256 offset = i * 416;
+            uint256 op = _readWord(preparedLines, offset);
+            _readFq2To(preparedLines, offset + 32, pXCoeffW);
+            _readFq2To(preparedLines, offset + 160, pConstCoeff);
+            _readFq2To(preparedLines, offset + 288, pCVert);
+            Lollipop305QExtensionPacked.fq2AddTo(pALine, pPy, pConstCoeff);
+            Lollipop305QExtensionPacked.fq2MulTo(pBLine, pXCoeffW, pPx, inner);
+            Lollipop305QExtensionPacked.fq2NegTo(pCVertical, pCVert);
+
+            if (op == 1) {
+                Lollipop305QExtensionPacked.fq6SqrTo(pNumNext, pNumCurrent, inner);
+                (pNumCurrent, pNumNext) = (pNumNext, pNumCurrent);
+                Lollipop305QExtensionPacked.fq6SqrTo(pDenNext, pDenCurrent, inner);
+                (pDenCurrent, pDenNext) = (pDenNext, pDenCurrent);
+            } else {
+                require(op == 0, "bad ehat ate op");
+            }
+            Lollipop305QExtensionPacked.fq6MulBy01To(pNumNext, pNumCurrent, pALine, pBLine, inner);
+            (pNumCurrent, pNumNext) = (pNumNext, pNumCurrent);
+            Lollipop305QExtensionPacked.fq6MulBy02To(pDenNext, pDenCurrent, pPx, pCVertical, inner);
+            (pDenCurrent, pDenNext) = (pDenNext, pDenCurrent);
+            unchecked {
+                ++i;
+            }
+        }
+        if (pNumCurrent != pNum) Lollipop305QExtensionPacked.fq6CopyTo(pNum, pNumCurrent);
+        if (pDenCurrent != pDen) Lollipop305QExtensionPacked.fq6CopyTo(pDen, pDenCurrent);
+    }
+
+    /// @notice Один проход по Ehat blob для произведения prepared-Ate трасс в точках P и -P.
+    /// @dev В отличие от двух отдельных вызовов `_millerEhatAteNumDenPackedOne`, здесь:
+    ///      - числитель умножается на line(P), затем на line(-P);
+    ///      - знаменатель vertical(P) зависит только от x(P), поэтому ведется один раз;
+    ///      - в конце возвращается D(P)^2 = D(P)D(-P).
+    ///      Это сохраняет формальную проверку знаменателя, но убирает повторную denominator-трассу.
+    function _millerEhatAteProductPacked(
+        bytes memory preparedLines,
+        uint256 pPx,
+        uint256 pPy,
+        uint256 pNum,
+        uint256 pDenProduct,
+        uint256 scratch
+    ) internal pure {
+        require(preparedLines.length % 416 == 0, "bad ehat ate blob");
+        uint256 pNumTmp = scratch;
+        uint256 pDen = scratch + 0x180;
+        uint256 pDenTmp = scratch + 0x300;
+        uint256 pXCoeffW = scratch + 0x480;
+        uint256 pConstCoeff = scratch + 0x500;
+        uint256 pCVert = scratch + 0x580;
+        uint256 pALinePlus = scratch + 0x600;
+        uint256 pALineMinus = scratch + 0x680;
+        uint256 pBLine = scratch + 0x700;
+        uint256 pCVertical = scratch + 0x780;
+        uint256 pNegPy = scratch + 0x800;
+        uint256 inner = scratch + 0x880;
+
+        Lollipop305QExtensionPacked.fq6OneTo(pNum, Q_ONE_0, Q_ONE_1);
+        Lollipop305QExtensionPacked.fq6OneTo(pDen, Q_ONE_0, Q_ONE_1);
+        Lollipop305QExtensionPacked.fq2NegTo(pNegPy, pPy);
+
+        uint256 pNumCurrent = pNum;
+        uint256 pNumNext = pNumTmp;
+        uint256 pDenCurrent = pDen;
+        uint256 pDenNext = pDenTmp;
+        uint256 steps = preparedLines.length / 416;
+        for (uint256 i; i < steps;) {
+            uint256 offset = i * 416;
+            uint256 op = _readWord(preparedLines, offset);
+            _readFq2To(preparedLines, offset + 32, pXCoeffW);
+            _readFq2To(preparedLines, offset + 160, pConstCoeff);
+            _readFq2To(preparedLines, offset + 288, pCVert);
+
+            Lollipop305QExtensionPacked.fq2AddTo(pALinePlus, pPy, pConstCoeff);
+            Lollipop305QExtensionPacked.fq2AddTo(pALineMinus, pNegPy, pConstCoeff);
+            Lollipop305QExtensionPacked.fq2MulTo(pBLine, pXCoeffW, pPx, inner);
+            Lollipop305QExtensionPacked.fq2NegTo(pCVertical, pCVert);
+
+            if (op == 1) {
+                Lollipop305QExtensionPacked.fq6SqrTo(pNumNext, pNumCurrent, inner);
+                (pNumCurrent, pNumNext) = (pNumNext, pNumCurrent);
+                Lollipop305QExtensionPacked.fq6SqrTo(pDenNext, pDenCurrent, inner);
+                (pDenCurrent, pDenNext) = (pDenNext, pDenCurrent);
+            } else {
+                require(op == 0, "bad ehat ate op");
+            }
+            Lollipop305QExtensionPacked.fq6MulBy01To(pNumNext, pNumCurrent, pALinePlus, pBLine, inner);
+            (pNumCurrent, pNumNext) = (pNumNext, pNumCurrent);
+            Lollipop305QExtensionPacked.fq6MulBy01To(pNumNext, pNumCurrent, pALineMinus, pBLine, inner);
+            (pNumCurrent, pNumNext) = (pNumNext, pNumCurrent);
+            Lollipop305QExtensionPacked.fq6MulBy02To(pDenNext, pDenCurrent, pPx, pCVertical, inner);
+            (pDenCurrent, pDenNext) = (pDenNext, pDenCurrent);
+            unchecked {
+                ++i;
+            }
+        }
+        if (pNumCurrent != pNum) Lollipop305QExtensionPacked.fq6CopyTo(pNum, pNumCurrent);
+        if (pDenCurrent == pDenProduct) {
+            Lollipop305QExtensionPacked.fq6SqrTo(pDenNext, pDenCurrent, inner);
+            Lollipop305QExtensionPacked.fq6CopyTo(pDenProduct, pDenNext);
+        } else {
+            Lollipop305QExtensionPacked.fq6SqrTo(pDenProduct, pDenCurrent, inner);
+        }
+    }
+
     /// @notice Читает подготовленные данные из указанного источника: `_readWord`.
     function _readWord(bytes memory data, uint256 o) internal pure returns (uint256 value) {
         assembly ("memory-safe") {
@@ -327,6 +653,51 @@ contract Lollipop305Article640Verifier {
         if (!started) acc = _oneFq6();
     }
 
+    /// @notice Packed exponentiation Fq6 с двумя переиспользуемыми аккумуляторами.
+    function _powFq6PackedTo(uint256 out, uint256 base, bytes memory exp, uint256 scratch) internal pure {
+        uint256 acc = scratch;
+        uint256 tmp = scratch + 0x180;
+        uint256 inner = scratch + 0x300;
+        Lollipop305QExtensionPacked.fq6OneTo(acc, Q_ONE_0, Q_ONE_1);
+        bool started;
+        for (uint256 i; i < exp.length;) {
+            uint8 b = uint8(exp[i]);
+            for (uint256 bit; bit < 8;) {
+                bool oneBit = (b & uint8(1 << (7 - bit))) != 0;
+                if (started) {
+                    Lollipop305QExtensionPacked.fq6SqrTo(tmp, acc, inner);
+                    (acc, tmp) = (tmp, acc);
+                    if (oneBit) {
+                        Lollipop305QExtensionPacked.fq6MulTo(tmp, acc, base, inner);
+                        (acc, tmp) = (tmp, acc);
+                    }
+                } else if (oneBit) {
+                    Lollipop305QExtensionPacked.fq6CopyTo(acc, base);
+                    started = true;
+                }
+                unchecked {
+                    ++bit;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        Lollipop305QExtensionPacked.fq6CopyTo(out, acc);
+    }
+
+    /// @notice Вычисляет c^p как c^q*(c^{-1})^(q-p).
+    /// @dev q-Фробениус в Fq6 дешевый: сопряжение Fq2-коэффициентов и две фиксированные
+    ///      константы. Дорогой остается только короткий показатель delta=q-p длиной 153 бита.
+    function _powFq6PViaFrobeniusTo(uint256 out, uint256 c, uint256 cInv, uint256 scratch) internal pure {
+        uint256 pFrob = scratch;
+        uint256 pDelta = scratch + 0x180;
+        uint256 inner = scratch + 0x300;
+        Lollipop305QExtensionPacked.fq6FrobeniusQTo(pFrob, c, inner);
+        _powFq6PackedTo(pDelta, cInv, Q_MINUS_P_EXP, inner);
+        Lollipop305QExtensionPacked.fq6MulTo(out, pFrob, pDelta, inner);
+    }
+
     /// @notice Читает подготовленные данные из указанного источника: `_readFp4`.
     function _readFp4(bytes memory data, uint256 o) internal pure returns (uint256[8] memory out) {
         assembly ("memory-safe") {
@@ -363,6 +734,17 @@ contract Lollipop305Article640Verifier {
 
     /// @notice Читает подготовленные данные из указанного источника: `_readFq2`.
     function _readFq2(bytes memory data, uint256 o) internal pure returns (uint256[4] memory out) {
+        assembly ("memory-safe") {
+            let ptr := add(add(data, 0x20), o)
+            mstore(out, mload(ptr))
+            mstore(add(out, 0x20), mload(add(ptr, 0x20)))
+            mstore(add(out, 0x40), mload(add(ptr, 0x40)))
+            mstore(add(out, 0x60), mload(add(ptr, 0x60)))
+        }
+    }
+
+    /// @notice Копирует один сериализованный Fq2 в заранее выделенный packed slot.
+    function _readFq2To(bytes memory data, uint256 o, uint256 out) internal pure {
         assembly ("memory-safe") {
             let ptr := add(add(data, 0x20), o)
             mstore(out, mload(ptr))

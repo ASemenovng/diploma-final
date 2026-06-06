@@ -1,1 +1,0 @@
-run_arith_2limb.sh

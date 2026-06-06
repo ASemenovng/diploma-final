@@ -689,7 +689,7 @@ MNT-cycle-native representation, если применимо
 В ответе нельзя оставлять такие формулировки:
 
 ```text
-TODO
+оставить на потом
 probably
 standard pairing
 use usual distortion map

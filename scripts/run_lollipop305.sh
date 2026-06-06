@@ -9,11 +9,13 @@ print_gas_rows "$log" \
   "verifyDirectFinalExponent" \
   "verifyCycleEResidue" \
   "verifyEhatAteResidue" \
+  "verifyEhatAteResidueProductFrobenius" \
   "verifyEhatWeilEquation" \
   "verifyStickResidueCommitted" \
   "verifyCycleEResidueCommitted" \
   "verifyEhatAteResidueCommitted" \
   "verifyStickResidueFixedShards" \
   "verifyCycleEResidueFixedShards" \
-  "verifyEhatAteResidueFixedShards"
+  "verifyEhatAteResidueFixedShards" \
+  "verifyEhatAteResidueProductFrobeniusFixedShards"
 print_pass_summary "$log"

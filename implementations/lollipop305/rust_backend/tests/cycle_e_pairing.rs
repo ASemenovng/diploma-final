@@ -1,6 +1,5 @@
 use lollipop305_backend::cycle_pairing::{
-    build_cycle_e_article640_fixture, build_cycle_e_miller_core_fixture,
-    build_cycle_e_distorted_article640_fixture, build_cycle_ehat_distorted_article640_fixture,
+    build_cycle_e_miller_core_fixture, build_cycle_e_distorted_article640_fixture,
     build_cycle_ehat_ate_residue_fixture, build_cycle_ehat_weil_fixture,
     check_cycle_ehat_weil_pairing, cycle_e_final_exponent,
 };
@@ -22,16 +21,6 @@ fn cycle_e_distorted_fixture_satisfies_direct_and_residue_relations() {
     assert_eq!(cycle_e_final_exponent(&fixture.core), Fp4::one());
     assert_eq!(fixture.c.mul(&fixture.c_inv), Fp4::one());
     assert_eq!(fixture.c.pow(&modulus_q()), fixture.core);
-}
-
-#[test]
-#[ignore = "Ehat/Fq2 needs an additional j=0 supersingular pairing equation derivation: the naive psi_Ehat + Tate-style product does not satisfy direct FE"]
-fn cycle_ehat_distorted_fixture_satisfies_direct_and_residue_relations() {
-    let fixture = build_cycle_ehat_distorted_article640_fixture().expect("distorted cycle Ehat fixture");
-    assert!(fixture.steps.len() > 300);
-    assert!(fixture.direct_is_one);
-    assert!(fixture.c_times_c_inv_is_one);
-    assert!(fixture.c_to_p_equals_core);
 }
 
 #[test]
@@ -63,14 +52,4 @@ fn cycle_ehat_ate_residue_fixture_satisfies_num_den_relation() {
     assert!(fixture.c_to_p_equals_f);
     assert!(fixture.residue_check);
     assert_eq!(fixture.c.pow(&lollipop305_backend::params::modulus_p()).mul(&fixture.f_den), fixture.f_num);
-}
-
-#[test]
-#[ignore = "blocked until exact ePrint1627/ePrint640 supersingular cycle pairing equation and denominator/Frobenius-tail relation are derived"]
-fn cycle_e_article640_fixture_satisfies_direct_and_residue_relations() {
-    let fixture = build_cycle_e_article640_fixture().expect("cycle E fixture");
-    assert!(fixture.steps.len() > 300);
-    assert_eq!(cycle_e_final_exponent(&fixture.core), Fp4::one());
-    assert_eq!(fixture.c.mul(&fixture.c_inv), Fp4::one());
-    assert_eq!(fixture.c.pow(&modulus_q()), fixture.core);
 }

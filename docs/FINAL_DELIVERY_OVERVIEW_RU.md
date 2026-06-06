@@ -1,6 +1,6 @@
 # Финальная директория проекта
 
-Финальная очищенная версия проекта находится в `/Users/a.i.semenov/diploma-final`. Исходная рабочая директория `/Users/a.i.semenov/mnt4-pairing-final` не изменялась.
+Финальная очищенная версия проекта находится в `/Users/a.i.semenov/diploma-final`. Ниже зафиксированы актуальная структура, команды запуска и свежие ориентиры по gas. Исторические пути в исследовательских документах сохранены только как контекст.
 
 ## 1. Архитектура директорий
 
@@ -15,6 +15,9 @@
 | `implementations/article640_mnt4` | Основная Article640 MNT4 реализация: calldata+commitment и code-shards/EXTCODECOPY. |
 | `implementations/article640_mnt6` | MNT6 Article640/residue реализация. |
 | `implementations/lollipop305` | Lollipop-305 research pipeline. |
+| `implementations/mnt4_merkle_fri_cost_model` | Актуальная модель стоимости Merkle/FRI-проверки цикла Миллера. |
+| `implementations/research_variants` | Архивные исполняемые эксперименты, не выбранные как основной путь. |
+| `experiments` | Независимые проверки альтернативных идей для 3-limb умножения. |
 | `baselines/naive_tate_mnt4` | Наивная Tate-точка отсчета. |
 | `mnt_cycle_full` | Rust-модель MNT4/MNT6 cycle-native constraints. |
 
@@ -31,6 +34,8 @@
 | `arithmetic/mnt4_3limb/research_variants` | Barrett, FIOS, Comba/SOS, branchless reduction, skip-t0, lazy и специализированные операции расширений. |
 | `arithmetic/lollipop305_2limb/research_variants` | Branchless reduction, skip-t0, small-high-limb варианты и структурная арифметика расширений для сравнения со stack API. |
 | `arithmetic/mnt4_3limb/test_support` | Типы, необходимые только тестовым контрактам Article640. |
+| `implementations/research_variants/mnt4_merkle_deep_fri_microtrace` | Консервативный DEEP-FRI-прототип, сохраненный как отрицательный эксперимент. |
+| `experiments/claude_fieldmul3*` | Независимые варианты 3-limb умножения и MODEXP-квадрата, не выбранные для production-пути. |
 
 Такое разделение сохраняет воспроизводимость таблиц диплома, но делает зависимости production-кода однозначными.
 
@@ -58,6 +63,7 @@ cd /Users/a.i.semenov/diploma-final
 ./scripts/run_lollipop305_backend.sh
 ./scripts/run_naive_tate.sh
 ./scripts/run_mnt_cycle.sh
+./scripts/run_mnt4_merkle_fri_cost_model.sh
 ```
 
 ## 3. Article640 MNT4: два финальных варианта
@@ -78,12 +84,15 @@ cd /Users/a.i.semenov/diploma-final
 | MNT4 full on-chain | fixed-Q on-chain digest | 259,327,933 |
 | MNT4 prepared | prepared sparse blob | 79,726,321 |
 | MNT4 prepared | prepared sparse code-shards | 80,140,929 |
-| Article640 MNT4 | residue equation, calldata | 93,881,355 |
+| Article640 MNT4 | residue equation, calldata | 93,913,739 |
 | Article640 MNT4 | residue equation, fixed-shards с проверкой G1 | 93,734,789 |
-| Article640 MNT4 | residue equation, calldata+commitment | 93,974,409 |
+| Article640 MNT4 | residue equation, calldata+commitment | 94,007,260 |
 | MNT6 | fixed-shards bool residue equation с проверкой G1 | 172,004,717 |
-| lollipop-305 | Ehat ate residue verifier | 106,457,927 |
-| lollipop-305 | Ehat Weil equation | 201,002,138 |
+| lollipop-305 | stick residue fixed-shards | 8,723,296 |
+| lollipop-305 | cycle-E residue fixed-shards | 18,384,363 |
+| lollipop-305 | Ehat product-Frobenius residue fixed-shards | 56,163,308 |
+| lollipop-305 | сумма трех актуальных lollipop-компонент | 83,270,967 |
+| lollipop-305 | Ehat Weil equation, контрольный тяжелый вариант | 174,865,343 |
 
 ## 5. Ограничения
 

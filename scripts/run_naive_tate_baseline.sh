@@ -1,1 +1,0 @@
-run_naive_tate.sh

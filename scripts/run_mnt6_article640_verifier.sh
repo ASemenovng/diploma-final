@@ -1,1 +1,0 @@
-run_mnt6_article640.sh
