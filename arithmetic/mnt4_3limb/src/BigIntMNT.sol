@@ -244,13 +244,13 @@ library BigIntMNT {
         }
     }
 
-    /// @notice Выполняет умножение `montMul3`; точный уровень поля и специальный множитель отражены в названии.
+    /// @notice Выполняет умножение `montMul3`;
     function montMul3(
         uint256 a0, uint256 a1, uint256 a2,
         uint256 b0, uint256 b1, uint256 b2
     ) internal pure returns (uint256 r0, uint256 r1, uint256 r2) {
         assembly ("memory-safe") {
-            // Выполняет умножение `mul512`; точный уровень поля и специальный множитель отражены в названии.
+            // Выполняет умножение `mul512`;
             function mul512(u, v) -> lo, hi {
                 lo := mul(u, v)
                 let mm := mulmod(u, v, not(0))
@@ -773,7 +773,7 @@ library BigIntMNT {
         (r[0], r[1], r[2]) = sub3(a[0], a[1], a[2], b[0], b[1], b[2]);
     }
 
-    /// @notice Выполняет умножение `montMul`; точный уровень поля и специальный множитель отражены в названии.
+    /// @notice Выполняет умножение `montMul`;
     function montMul(uint256[3] memory a, uint256[3] memory b) internal pure returns (uint256[3] memory r) {
         (r[0], r[1], r[2]) = montMul3(a[0], a[1], a[2], b[0], b[1], b[2]);
     }
