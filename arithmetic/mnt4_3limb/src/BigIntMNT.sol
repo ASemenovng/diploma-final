@@ -498,8 +498,6 @@ library BigIntMNT {
     }
 
     /// @notice Montgomery squaring specialized for n=3 limbs.
-    /// @dev Сейчас самый газ-эффективный (и безопасный) вариант: sqr = mul(a,a).
-    ///      Твой прежний specialized sqr оказался дороже, это видно по gas-report.
     function montSqr3(
         uint256 a0, uint256 a1, uint256 a2
     ) internal pure returns (uint256 r0, uint256 r1, uint256 r2) {
